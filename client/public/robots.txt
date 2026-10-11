@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+# Replace with your deployed API URL; the API serves a live sitemap of all products.
+Sitemap: https://YOUR-API-URL/sitemap.xml
