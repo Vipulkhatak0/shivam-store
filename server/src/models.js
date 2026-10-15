@@ -73,5 +73,13 @@ export const AuditLog = model('AuditLog', new Schema({ admin: id('User'), action
 const rev = new Schema({ product: id('Product'), user: id('User'), name: String, rating: { type: Number, min: 1, max: 5 }, comment: String }, T);
 rev.index({ product: 1, user: 1 }, { unique: true });
 export const Review = model('Review', rev);
-export const Banner = model('Banner', new Schema({ key: { type: String, unique: true }, title: String, subtitle: String, cta: String, link: String, active: { type: Boolean, default: true } }));
+const bannerS = new Schema({
+  key: { type: String, unique: true }, title: { type: String, required: true, trim: true }, subtitle: { type: String, default: '' },
+  desktopImage: String, mobileImage: String,
+  type: { type: String, enum: ['IMAGE', 'PROMOTIONAL', 'TODAYS_SPECIAL', 'FESTIVAL', 'PRODUCT_OFFER'], default: 'TODAYS_SPECIAL' },
+  cta: { type: String, default: '' }, link: { type: String, default: '' }, discountText: String, badge: String, backgroundColor: { type: String, default: '#FCE8E6' },
+  active: { type: Boolean, default: true }, order: { type: Number, default: 0 }, startsAt: Date, endsAt: Date,
+}, T);
+bannerS.index({ active: 1, order: 1 });
+export const Banner = model('Banner', bannerS);
 export const DeliverySlot = model('DeliverySlot', new Schema({ label: { type: String, unique: true }, order: { type: Number, default: 0 }, active: { type: Boolean, default: true } }));

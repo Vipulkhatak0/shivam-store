@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { api, img } from '../api.js';
 import { useStore } from '../store.js';
@@ -6,7 +6,7 @@ import { money, btn, btn2, inp, Badge, Timeline, label, useSync, Icon, Logo } fr
 import Chat from './Chat.jsx';
 import NotificationSettings from './NotificationSettings.jsx';
 
-const TABS = [['Dashboard', 'grid'], ['Orders', 'box'], ['Custom Orders', 'cake'], ['Products', 'tag'], ['Categories', 'tag'], ['Customers', 'users'], ['Coupons', 'tag'], ['Messages', 'chat'], ['Settings', 'cog'], ['Notifications', 'bell']];
+const TABS = [['Dashboard', 'grid'], ['Orders', 'box'], ['Custom Orders', 'cake'], ['Products', 'tag'], ['Categories', 'tag'], ['Customers', 'users'], ['Coupons', 'tag'], ['Messages', 'chat'], ['Banner Management', 'tag'], ['Settings', 'cog'], ['Notifications', 'bell']];
 const NEXT = { PENDING: ['CONFIRMED', 'REJECTED'], CONFIRMED: ['PREPARING', 'REJECTED'], PREPARING: ['READY', 'OUT_FOR_DELIVERY', 'REJECTED'], READY: ['OUT_FOR_DELIVERY', 'DELIVERED'], OUT_FOR_DELIVERY: ['DELIVERED'] };
 const sync = () => window.dispatchEvent(new Event('sync'));
 
@@ -134,15 +134,59 @@ function Categories() {
   return <><form onSubmit={add} className="mb-4 flex flex-wrap gap-2 rounded-xl border bg-white p-3"><input required className={inp + ' !w-48'} aria-label="Category name" placeholder="Category name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><button className={btn}>Add category</button></form>
     {cs.map((c) => <div key={c._id} className={'mb-2 flex items-center justify-between rounded-xl border bg-white p-3 text-sm ' + (c.active ? '' : 'opacity-50')}><b>{c.name}</b><button className={btn2} onClick={async () => { await api('/admin/categories/' + c._id, { method: 'PUT', body: { active: !c.active } }); sync(); }}>{c.active ? 'Disable' : 'Enable'}</button></div>)}</>;
 }
+const emptyBanner = (order = 0) => ({ title: '', subtitle: '', type: 'TODAYS_SPECIAL', cta: '', link: '', discountText: '', badge: '', backgroundColor: '#FCE8E6', active: true, order, startsAt: '', endsAt: '' });
+const bannerTypeLabels = { IMAGE: 'Image Banner', PROMOTIONAL: 'Promotional Banner', TODAYS_SPECIAL: "Today's Special", FESTIVAL: 'Festival Banner', PRODUCT_OFFER: 'Product Offer' };
+function BannerManagement() {
+  const [banners, setBanners] = useState(null), [form, setForm] = useState(emptyBanner()), [editing, setEditing] = useState(null), [desktopFile, setDesktopFile] = useState(null), [mobileFile, setMobileFile] = useState(null), [busy, setBusy] = useState(false);
+  const [desktopPreview, setDesktopPreview] = useState(null), [mobilePreview, setMobilePreview] = useState(null);
+  const toast = useStore((s) => s.toast);
+  useEffect(() => {
+    const d = desktopFile ? URL.createObjectURL(desktopFile) : null, m = mobileFile ? URL.createObjectURL(mobileFile) : null;
+    setDesktopPreview(d); setMobilePreview(m);
+    return () => { if (d) URL.revokeObjectURL(d); if (m) URL.revokeObjectURL(m); };
+  }, [desktopFile, mobileFile]);
+  const load = () => api('/admin/banners').then(setBanners).catch((e) => { setBanners([]); toast(e.message); });
+  useSync(() => { load(); }, []);
+  const startEdit = (b) => { setEditing(b._id); setForm({ ...emptyBanner(b.order), ...b, startsAt: b.startsAt ? new Date(b.startsAt).toISOString().slice(0, 16) : '', endsAt: b.endsAt ? new Date(b.endsAt).toISOString().slice(0, 16) : '' }); setDesktopFile(null); setMobileFile(null); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const reset = () => { setEditing(null); setForm(emptyBanner(banners?.length || 0)); setDesktopFile(null); setMobileFile(null); };
+  async function save(e) {
+    e.preventDefault(); setBusy(true);
+    try {
+      const data = new FormData();
+      for (const [k, v] of Object.entries(form)) if (v !== undefined && v !== null) data.append(k, typeof v === 'boolean' ? String(v) : String(v));
+      if (desktopFile) data.append('desktopImage', desktopFile); if (mobileFile) data.append('mobileImage', mobileFile);
+      await api(editing ? `/admin/banners/${editing}` : '/admin/banners', { method: editing ? 'PUT' : 'POST', form: data });
+      toast(editing ? 'Banner updated' : 'Banner created'); reset(); await load(); window.dispatchEvent(new Event('banner:changed'));
+    } catch (e) { toast(e.message); } finally { setBusy(false); }
+  }
+  async function patch(b, changes) { try { await api(`/admin/banners/${b._id}`, { method: 'PUT', body: changes }); await load(); window.dispatchEvent(new Event('banner:changed')); } catch (e) { toast(e.message); } }
+  async function remove(b) { if (!window.confirm(`Delete “${b.title}”?`)) return; try { await api(`/admin/banners/${b._id}`, { method: 'DELETE' }); toast('Banner deleted'); await load(); window.dispatchEvent(new Event('banner:changed')); } catch (e) { toast(e.message); } }
+  async function move(i, step) { const next = [...banners], j = i + step; if (j < 0 || j >= next.length) return; [next[i], next[j]] = [next[j], next[i]]; setBanners(next); try { await api('/admin/banners/reorder', { method: 'PUT', body: { ids: next.map((b) => b._id) } }); window.dispatchEvent(new Event('banner:changed')); } catch (e) { toast(e.message); await load(); } }
+  const desktopSrc = desktopPreview || (form.desktopImage ? img(form.desktopImage) : null), mobileSrc = mobilePreview || (form.mobileImage ? img(form.mobileImage) : null);
+  return <div className="space-y-5">
+    <form onSubmit={save} className="grid gap-4 rounded-xl border bg-white p-4 lg:grid-cols-2">
+      <div className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-extrabold">{editing ? 'Edit banner' : 'Add banner'}</h2>{editing && <button type="button" className={btn2} onClick={reset}>New banner</button>}</div>
+        <label className="block text-sm font-semibold">Banner type<select className={inp} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{Object.entries(bannerTypeLabels).map(([v, label]) => <option value={v} key={v}>{label}</option>)}</select></label>
+        {[['title', 'Title'], ['subtitle', 'Subtitle'], ['cta', 'CTA button text'], ['link', 'Destination path or URL'], ['discountText', 'Discount text (optional)'], ['badge', 'Badge (optional)']].map(([k, label]) => <label key={k} className="block text-sm font-semibold">{label}<input className={inp} maxLength={k === 'subtitle' ? 180 : 500} value={form[k] || ''} onChange={(e) => setForm({ ...form, [k]: e.target.value })} required={k === 'title'} /></label>)}
+        <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Background<input className="mt-1 h-10 w-full rounded border p-1" type="color" value={form.backgroundColor || '#FCE8E6'} onChange={(e) => setForm({ ...form, backgroundColor: e.target.value })} /></label><label className="text-sm font-semibold">Display order<input className={inp} type="number" min="0" value={form.order ?? 0} onChange={(e) => setForm({ ...form, order: +e.target.value })} /></label></div>
+        <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Starts (optional)<input className={inp} type="datetime-local" value={form.startsAt || ''} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label><label className="text-sm font-semibold">Ends (optional)<input className={inp} type="datetime-local" value={form.endsAt || ''} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} /></label></div>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />Active on homepage</label>
+        <div className="flex gap-2"><button className={btn} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create banner'}</button>{editing && <button type="button" className={btn2} onClick={reset}>Cancel</button>}</div>
+      </div>
+      <div className="grid content-start gap-3 sm:grid-cols-2"><label className="text-sm font-semibold">Desktop image<input className="mt-1 block w-full text-xs" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setDesktopFile(e.target.files?.[0] || null)} />
+        <div className="relative mt-2 flex aspect-[16/7] items-center overflow-hidden rounded-lg p-3 text-white shadow-sm" style={{ backgroundColor: form.backgroundColor || '#FCE8E6' }}>{desktopSrc && <img src={desktopSrc} alt="" className="absolute inset-0 h-full w-full object-cover" />}<div className="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent" /><div className="relative z-10 max-w-[75%]"><span className="text-[9px] font-bold uppercase">{form.badge || bannerTypeLabels[form.type]}</span><div className="mt-1 truncate text-sm font-extrabold sm:text-lg">{form.title || 'Banner title'}</div><div className="truncate text-[10px] sm:text-xs">{form.subtitle || 'Banner subtitle'}</div>{form.cta && <span className="mt-2 inline-block rounded bg-brand px-2 py-1 text-[9px] font-bold">{form.cta}</span>}</div></div></label>
+        <label className="text-sm font-semibold">Mobile image<input className="mt-1 block w-full text-xs" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setMobileFile(e.target.files?.[0] || null)} />
+        <div className="relative mx-auto mt-2 flex aspect-[9/16] w-32 items-end overflow-hidden rounded-xl p-2 text-white shadow-sm" style={{ backgroundColor: form.backgroundColor || '#FCE8E6' }}>{(mobileSrc || desktopSrc) && <img src={mobileSrc || desktopSrc} alt="" className="absolute inset-0 h-full w-full object-cover" />}<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" /><div className="relative z-10"><span className="text-[8px] font-bold uppercase">{form.badge || bannerTypeLabels[form.type]}</span><div className="mt-1 line-clamp-2 text-xs font-extrabold">{form.title || 'Banner title'}</div><div className="line-clamp-2 text-[9px]">{form.subtitle || 'Banner subtitle'}</div>{form.cta && <span className="mt-1 inline-block rounded bg-brand px-1.5 py-0.5 text-[8px] font-bold">{form.cta}</span>}</div></div></label>
+        <p className="text-xs text-neutral-500 sm:col-span-2">Choose images from your device. If no mobile image is uploaded, the desktop image is used with responsive cropping.</p></div>
+    </form>
+    <section className="space-y-3"><h2 className="text-lg font-extrabold">All banners</h2>{banners === null ? <div className="skeleton h-24" /> : banners.length === 0 ? <p className="rounded-xl border bg-white p-5 text-sm text-neutral-500">No banners yet. Add one above to show a homepage carousel.</p> : banners.map((b, i) => <article key={b._id} className={'rounded-xl border bg-white p-3 ' + (!b.active ? 'opacity-60' : '')}><div className="flex flex-wrap items-center gap-3"><img src={img(b.desktopImage || b.mobileImage) || '/img/special.png'} alt="" className="h-16 w-28 rounded-lg object-cover" /><div className="min-w-0 flex-1"><b>{b.title}</b><p className="text-xs text-neutral-500">{bannerTypeLabels[b.type] || b.type} · Order {b.order} · {b.active ? 'Active' : 'Inactive'}</p><p className="truncate text-sm text-neutral-600">{b.subtitle}</p></div><div className="flex flex-wrap gap-1"><button title="Move up" className={btn2} disabled={i === 0} onClick={() => move(i, -1)}>↑</button><button title="Move down" className={btn2} disabled={i === banners.length - 1} onClick={() => move(i, 1)}>↓</button><button className={btn2} onClick={() => patch(b, { active: !b.active })}>{b.active ? 'Disable' : 'Enable'}</button><button className={btn2} onClick={() => startEdit(b)}>Edit</button><button className="rounded-lg border border-red-200 px-3 py-2 font-semibold text-red-700" onClick={() => remove(b)}>Delete</button></div></div></article>)}</section>
+  </div>;
+}
 function Settings() {
-  const [b, setB] = useState({ title: '', subtitle: '', cta: 'Order Now', link: '/shop/cakes', active: true }), [slots, setSlots] = useState([]), [lab, setLab] = useState(''), [log, setLog] = useState([]); const toast = useStore((s) => s.toast);
-  useSync(() => { api('/admin/banner').then((x) => x && setB(x)).catch(() => {}); api('/admin/delivery-slots').then(setSlots).catch(() => {}); api('/admin/audit').then(setLog).catch(() => {}); }, []);
-  async function saveB(e) { e.preventDefault(); try { await api('/admin/banner', { method: 'PUT', body: { title: b.title, subtitle: b.subtitle, cta: b.cta, link: b.link, active: b.active } }); toast('Banner saved'); } catch (x) { toast(x.message); } }
+  const [slots, setSlots] = useState([]), [lab, setLab] = useState(''), [log, setLog] = useState([]); const toast = useStore((s) => s.toast);
+  useSync(() => { api('/admin/delivery-slots').then(setSlots).catch(() => {}); api('/admin/audit').then(setLog).catch(() => {}); }, []);
   async function addS(e) { e.preventDefault(); try { await api('/admin/delivery-slots', { method: 'POST', body: { label: lab } }); setLab(''); sync(); } catch (x) { toast(x.message); } }
   return <div className="grid gap-4 lg:grid-cols-2">
-    <form onSubmit={saveB} className="space-y-2 rounded-xl border bg-white p-4"><h2 className="font-extrabold">"Today's Special" banner</h2>
-      {[['title', 'Title'], ['subtitle', 'Subtitle'], ['cta', 'Button text'], ['link', 'Button link (e.g. /shop/cakes)']].map(([k, l]) => <input key={k} required={k === 'title'} aria-label={l} placeholder={l} className={inp} value={b[k] || ''} onChange={(e) => setB({ ...b, [k]: e.target.value })} />)}
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={b.active} onChange={(e) => setB({ ...b, active: e.target.checked })} />Show on homepage</label><button className={btn}>Save banner</button></form>
     <div className="rounded-xl border bg-white p-4"><h2 className="mb-2 font-extrabold">Delivery slots</h2>{slots.map((s) => <div key={s._id} className="mb-1 flex items-center justify-between text-sm"><span className={s.active ? '' : 'text-neutral-400 line-through'}>{s.label}</span><button className="text-xs font-bold text-brand" onClick={async () => { await api('/admin/delivery-slots/' + s._id, { method: 'PATCH', body: { active: !s.active } }); sync(); }}>{s.active ? 'Disable' : 'Enable'}</button></div>)}
       <form onSubmit={addS} className="mt-2 flex gap-2"><input required className={inp} aria-label="New slot" placeholder="e.g. 8-10" value={lab} onChange={(e) => setLab(e.target.value)} /><button className={btn}>Add</button></form>
       <p className="mt-3 text-xs text-neutral-500">Delivery fee, free-delivery threshold and minimum order are set in the server's .env (DELIVERY_FEE, FREE_DELIVERY_ABOVE, MIN_ORDER).</p></div>
@@ -163,5 +207,5 @@ export default function Admin() {
     <section className="min-w-0 flex-1 p-4 md:p-6"><div className="mb-4 flex items-center justify-between"><h1 className="flex items-center gap-2 text-2xl font-extrabold"><button className="md:hidden" aria-label="Open menu" onClick={() => setOpen(true)}><Icon n="menu" className="h-6 w-6" /></button>{tab}</h1>
       <button className={btn + ' hidden sm:inline-flex'} onClick={() => go('Products')}><Icon n="plus" className="h-4 w-4" />Add Product</button></div>
       {tab === 'Dashboard' && <Dash go={go} />}{tab === 'Orders' && <Orders />}{tab === 'Custom Orders' && <Custom openChat={(id) => { setChatWith(id); setTab('Messages'); }} />}
-      {tab === 'Products' && <Products />}{tab === 'Categories' && <Categories />}{tab === 'Customers' && <Customers />}{tab === 'Coupons' && <Coupons />}{tab === 'Messages' && <Messages pick={chatWith} />}{tab === 'Settings' && <Settings />}{tab === 'Notifications'&&<NotificationSettings/>}</section></div>);
+      {tab === 'Products' && <Products />}{tab === 'Categories' && <Categories />}{tab === 'Customers' && <Customers />}{tab === 'Coupons' && <Coupons />}{tab === 'Messages' && <Messages pick={chatWith} />}{tab === 'Banner Management' && <BannerManagement />}{tab === 'Settings' && <Settings />}{tab === 'Notifications'&&<NotificationSettings/>}</section></div>);
 }

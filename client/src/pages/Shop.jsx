@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api, img } from '../api.js';
 import { useStore } from '../store.js';
 import { Thumb, money, btn, btn2, Skel, useSync, useSeo, Icon, Qty } from '../ui.jsx';
+import BannerCarousel from '../components/BannerCarousel.jsx';
 
 export function ProductCard({ p }) {
   const { add, toggleWish, wish } = useStore(); const [q, setQ] = useState(1);
@@ -22,21 +23,15 @@ export function ProductCard({ p }) {
 }
 const SEC = ({ title, to, children }) => <section className="mt-8"><div className="mb-3 flex items-end justify-between"><h2 className="text-2xl font-extrabold">{title}</h2>{to && <Link to={to} className="flex items-center gap-1 text-sm font-semibold text-brand">View All <Icon n="arrow" className="h-4 w-4" /></Link>}</div>{children}</section>;
 export function Home() {
-  const [cats, setCats] = useState(null), [pop, setPop] = useState(null), [ban, setBan] = useState(null);
+  const [cats, setCats] = useState(null), [pop, setPop] = useState(null);
   useSeo('', 'Order fresh cakes, biscuits, snacks and everyday groceries from Shivam Store with fast local delivery.', { '@context': 'https://schema.org', '@type': 'Bakery', name: 'Shivam Store', slogan: 'Fresh Cakes • Snacks • Everyday Essentials', url: location.origin, priceRange: '₹' });
-  useSync(() => { api('/categories').then(setCats).catch(() => setCats([])); api('/products?featured=true&limit=6').then((d) => setPop(d.items)).catch(() => setPop([])); api('/banner').then(setBan).catch(() => {}); }, []);
+  useSync(() => { api('/categories').then(setCats).catch(() => setCats([])); api('/products?featured=true&limit=6').then((d) => setPop(d.items)).catch(() => setPop([])); }, []);
   const top = (cats || []).slice(0, 4), rest = (cats || []).slice(4);
   return (<>
-    <section className="relative hidden h-[258px] overflow-hidden rounded-lg bg-peach md:block">
-      <img src="/img/hero.png" alt="Shivam Store mascot holding a chocolate cake and giving a thumbs up" className="hero-img absolute right-0 top-0 h-full w-auto max-w-[68%] object-cover object-right" />
-      <div className="relative z-10 px-10 pt-9"><h1 className="text-[42px] font-extrabold leading-tight text-cocoa">Cakes, snacks<br />and daily groceries</h1>
-        <p className="mt-3 max-w-xs text-[17px] leading-snug text-cocoa/80">Everyday essentials</p></div>
-      <Link to="/shop" className={btn + ' absolute bottom-6 left-10 z-10 !px-7 !py-2.5 text-lg'}>Browse products <Icon n="arrow" /></Link>
-    </section>
     {top.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2 md:hidden">{top.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="text-center"><div className="flex h-16 items-center justify-center rounded-xl border bg-white p-1"><img src={img(c.image)} alt="" className="max-h-full object-contain" /></div><span className="text-xs font-semibold">{c.name}</span></Link>)}</div>}
-    {ban && <section className="mt-4 flex items-center justify-between overflow-hidden rounded-2xl bg-peach p-4 md:hidden"><div><h2 className="font-extrabold leading-tight text-brand">Today's Special</h2><p className="mt-1 font-semibold leading-tight text-cocoa">{ban.title}<br />{ban.subtitle}</p><Link to={ban.link || '/shop'} className={btn + ' mt-3 !px-4 !py-1.5 text-sm'}>{ban.cta}</Link></div><img src="/img/special.png" alt="" className="h-28 w-28 object-contain" /></section>}
     <div className="mt-4 hidden grid-cols-4 gap-4 md:grid">{!cats ? Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-[66px]" />) : top.map((c) => (
       <Link key={c._id} to={`/shop/${c.slug}`} className="flex items-center gap-4 rounded-xl border border-neutral-200 bg-[#F6F3F1] px-4 py-2 transition hover:border-brand"><img src={img(c.image)} alt="" className="h-12 w-16 object-contain mix-blend-multiply" /><b className="flex-1 text-lg">{c.name}</b><Icon n="chev" className="h-5 w-5 text-neutral-500" /></Link>))}</div>
+    <BannerCarousel />
     {rest.length > 0 && <div className="noscroll mt-3 flex gap-2 overflow-x-auto">{rest.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="whitespace-nowrap rounded-md border bg-white px-3 py-1.5 text-sm font-semibold hover:border-brand">{c.name}</Link>)}</div>}
     <SEC title="Popular Products" to="/shop">{!pop ? <Skel /> : pop.length === 0 ? <p className="text-neutral-500">No products yet</p> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">{pop.map((p) => <ProductCard key={p._id} p={p} />)}</div>}</SEC>
   </>);

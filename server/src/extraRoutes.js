@@ -54,6 +54,9 @@ r.get('/orders/:id/reorder', auth, wrap(async (req, res) => {
 }));
 
 // ---------- public store content ----------
-r.get('/banner', wrap(async (req, res) => ok(res, await Banner.findOne({ key: 'special', active: true }))));
+r.get('/banner', wrap(async (req, res) => {
+  const now = new Date();
+  ok(res, await Banner.find({ active: true, $and: [{ $or: [{ startsAt: { $exists: false } }, { startsAt: null }, { startsAt: { $lte: now } }] }, { $or: [{ endsAt: { $exists: false } }, { endsAt: null }, { endsAt: { $gt: now } }] }] }).sort({ order: 1, createdAt: 1 }));
+}));
 r.get('/delivery-slots', wrap(async (req, res) => ok(res, await DeliverySlot.find({ active: true }).sort('order'))));
 export default r;
