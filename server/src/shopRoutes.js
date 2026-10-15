@@ -6,7 +6,7 @@ import multer from 'multer';
 import fs from 'fs';
 import Razorpay from 'razorpay';
 import { v2 as cloudinary } from 'cloudinary';
-import { Category, Product, Order, CustomRequest, Notification, Message, Coupon, DeliverySlot } from './models.js';
+import { Category, Product, Order, CustomRequest, Notification, Message, Coupon, DeliverySlot, User } from './models.js';
 import { ok, AppError, wrap, auth, validate, notify, notifyAdmins, emitUser, emitAdmin } from './util.js';
 
 export const upload = multer({
@@ -106,7 +106,16 @@ async function totals(subtotal, code) {
   }
   return { deliveryFee, discount, coupon, total: subtotal + deliveryFee - discount };
 }
-const itemsSchema = z.array(z.object({ product: z.string(), qty: z.number().int().min(1).max(20) })).min(1);
+const itemsSchema = z.array(z.object({ product: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid product in cart.'), qty: z.number().int().min(1).max(20) })).min(1);
+r.post('/cart/validate', validate(z.object({ items: itemsSchema })), wrap(async (req, res) => {
+  const ids = req.body.items.map((i) => i.product);
+  const products = await Product.find({ _id: { $in: ids } }).select('_id name price stock active image images emoji').lean();
+  const byId = new Map(products.map((p) => [String(p._id), p]));
+  ok(res, req.body.items.map((i) => {
+    const p = byId.get(i.product);
+    return p ? { id: i.product, name: p.name, price: p.price, stock: p.stock, active: p.active, available: p.active && p.stock >= i.qty, image: p.image || p.images?.[0] || '', emoji: p.emoji } : { id: i.product, name: 'Unavailable item', available: false, missing: true };
+  }));
+}));
 r.post('/coupons/validate', validate(z.object({ items: itemsSchema, coupon: z.string().optional() })), wrap(async (req, res) => {
   const { subtotal } = await priceLines(req.body.items); ok(res, { subtotal, ...(await totals(subtotal, req.body.coupon)) });
 }));
@@ -136,7 +145,7 @@ async function announce(order, paid) {
   if(paid) await notifyAdmins('PAYMENT_SUCCESS','','',{template:true,orderNumber:order.code,customerName:customer?.name,total:order.total,orderId:order._id});
   await notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', '', '', { template:true, orderNumber:order.code, total:order.total, orderId: order._id });
 }
-async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupon, total, address, deliveryDate, deliverySlot, note, method, customRequest }) {
+async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupon, total, address, deliveryDate, deliverySlot, note, method, customRequest, idempotencyKey }) {
   const taken = [];
   try {
     for (const l of lines.filter((x) => x.product)) {
@@ -148,7 +157,7 @@ async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupo
     }
     if (coupon) await Coupon.updateOne({ code: coupon }, { $inc: { used: 1 } });
     const code = 'SHV' + (1000 + (await Order.countDocuments()) + Math.floor(Math.random() * 9));
-    const o = await Order.create({ code, user, items: lines, subtotal, deliveryFee, discount, total, coupon, address, deliveryDate, deliverySlot, note, customRequest,
+    const o = await Order.create({ code, idempotencyKey, user, items: lines, subtotal, deliveryFee, discount, total, coupon, address, deliveryDate, deliverySlot, note, customRequest,
       status: customRequest && method === 'COD' ? 'CONFIRMED' : 'PENDING', payment: { method, amount: total }, history: [{ status: 'PENDING' }] });
     return o;
   } catch (e) { for (const l of taken) await Product.updateOne({ _id: l.product }, { $inc: { stock: l.qty } }); throw e; }
@@ -162,16 +171,23 @@ export { restoreStock, log as logStatus };
 
 r.post('/orders', auth, validate(z.object({
   items: itemsSchema, coupon: z.string().optional(), method: z.enum(['COD', 'ONLINE']), address: addr,
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), deliverySlot: z.string().min(2), note: z.string().max(300).optional(),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), deliverySlot: z.string().min(2), note: z.string().max(300).optional(), idempotencyKey: z.string().uuid(),
 })), wrap(async (req, res) => {
   const b = req.body;
+  const paymentDetails = (order) => order.payment.method !== 'ONLINE' ? null : testPay()
+    ? { test: true, label: 'TEST MODE: no real payment is taken' }
+    : { razorpayOrderId: order.payment.razorpayOrderId, keyId: process.env.RAZORPAY_KEY_ID, amount: Math.round(order.total * 100) };
+  const existing = await Order.findOne({ user: req.user._id, idempotencyKey: b.idempotencyKey });
+  if (existing) return ok(res, { order: existing, payment: paymentDetails(existing) }, 'Order already created.');
   if (new Date(b.deliveryDate + 'T23:59:59') < new Date()) throw new AppError('Choose today or a future delivery date.', 'BAD_DATE');
   if (b.deliverySlot !== 'ASAP' && !(await DeliverySlot.exists({ label: b.deliverySlot, active: true }))) throw new AppError('Choose an available delivery slot.', 'BAD_SLOT');
   const { lines, subtotal } = await priceLines(b.items); const t = await totals(subtotal, b.coupon);
-  const order = await createOrder({ user: req.user._id, lines, subtotal, ...t, address: b.address, deliveryDate: b.deliveryDate, deliverySlot: b.deliverySlot, note: b.note, method: b.method });
+  const order = await createOrder({ user: req.user._id, lines, subtotal, ...t, address: b.address, deliveryDate: b.deliveryDate, deliverySlot: b.deliverySlot, note: b.note, method: b.method, idempotencyKey: b.idempotencyKey });
   let payment = null;
-  try { payment = await startPayment(order); } catch (e) { await restoreStock(order); log(order, 'CANCELLED'); await order.save(); throw e; }
-  if (b.method === 'COD') await announce(order, false);
+  try { payment = await startPayment(order); } catch (e) { await restoreStock(order); if (order.coupon) await Coupon.updateOne({ code: order.coupon, used: { $gt: 0 } }, { $inc: { used: -1 } }); await order.deleteOne(); throw e; }
+  if (b.method === 'COD') {
+    try { await announce(order, false); } catch (e) { console.error('Order notification delivery failed:', e); }
+  }
   ok(res, { order, payment }, 'Order created.', 201);
 }));
 r.post('/orders/:id/verify', auth, wrap(async (req, res) => {

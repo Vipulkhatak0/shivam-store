@@ -1,31 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, pay } from '../api.js';
 import { useStore } from '../store.js';
 import { Thumb, money, btn, btn2, inp, Icon, Qty, useSync } from '../ui.jsx';
 
 function useSummary() {
-  const { cart, coupon, setCoupon } = useStore(); const [sum, setSum] = useState(null), [err, setErr] = useState('');
+  const { cart, coupon, setCoupon } = useStore(); const [sum, setSum] = useState(null), [err, setErr] = useState(''), [catalog, setCatalog] = useState([]);
   const items = cart.map((i) => ({ product: i.id, qty: i.qty }));
   useEffect(() => { // totals always come from the server
     if (!cart.length) return setSum(null);
-    api('/coupons/validate', { method: 'POST', body: { items, coupon: coupon || undefined } }).then((s) => { setSum(s); setErr(''); }).catch((e) => { setErr(e.message); if (coupon) setCoupon(''); });
+    api('/cart/validate', { method: 'POST', body: { items } }).then((products) => {
+      setCatalog(products);
+      const unavailable = products.filter((p) => !p.available);
+      if (unavailable.length) { setSum(null); setErr(unavailable.map((p) => `${p.name}${p.missing ? ' was removed from the catalog' : !p.active ? ' is inactive' : ` has only ${p.stock} in stock`}. Remove it to continue.`).join(' ')); return; }
+      return api('/coupons/validate', { method: 'POST', body: { items, coupon: coupon || undefined } }).then((s) => { setSum(s); setErr(''); });
+    }).catch((e) => { setErr(e.message); if (coupon) setCoupon(''); });
   }, [JSON.stringify(items), coupon]); // eslint-disable-line
-  return { sum, err, items };
+  return { sum, err, items, catalog };
 }
 const Summary = ({ sum }) => sum && <dl className="space-y-1.5 text-sm"><div className="flex justify-between"><dt>Subtotal</dt><dd>{money(sum.subtotal)}</dd></div><div className="flex justify-between"><dt>Delivery Charge</dt><dd>{sum.deliveryFee ? money(sum.deliveryFee) : 'Free'}</dd></div>{sum.discount > 0 && <div className="flex justify-between text-green-700"><dt>Discount ({sum.coupon})</dt><dd>−{money(sum.discount)}</dd></div>}<div className="flex justify-between border-t pt-2 text-base font-extrabold"><dt>Total</dt><dd>{money(sum.total)}</dd></div></dl>;
 const Empty = () => <div className="py-20 text-center"><Icon n="cart" className="mx-auto h-14 w-14 text-neutral-300" /><h1 className="mt-2 text-2xl font-extrabold">Your cart is empty</h1><Link to="/shop" className={btn + ' mt-4'}>Browse products</Link></div>;
 
 export function Cart() {
-  const { cart, setQty, clearCart, coupon, setCoupon } = useStore(); const nav = useNavigate(); const { sum, err } = useSummary(); const [c, setC] = useState(coupon);
+  const { cart, setQty, clearCart, coupon, setCoupon } = useStore(); const nav = useNavigate(); const { sum, err, catalog } = useSummary(); const [c, setC] = useState(coupon);
+  const current = new Map(catalog.map((p) => [p.id, p]));
   if (!cart.length) return <Empty />;
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-3 flex items-center justify-between"><h1 className="flex items-center gap-2 text-xl font-extrabold"><button aria-label="Go back" onClick={() => nav(-1)}><Icon n="back" /></button>Your Cart</h1><button aria-label="Clear cart" className="text-neutral-500 hover:text-brand" onClick={clearCart}><Icon n="trash" /></button></div>
       <div className="grid gap-4 md:grid-cols-5"><section className="space-y-2 md:col-span-3">
-        {cart.map((i) => <div key={i.id} className="flex items-center gap-3 rounded-xl border bg-white p-3"><Thumb p={i} cls="h-16 w-16 rounded-lg" />
-          <div className="min-w-0 flex-1"><b className="block truncate text-sm">{i.name}</b><span className="text-sm font-semibold">{money(i.price)}</span></div>
-          <Qty v={i.qty} set={(q) => setQty(i.id, q)} max={i.stock} /><button aria-label={`Remove ${i.name}`} className="text-neutral-400 hover:text-brand" onClick={() => setQty(i.id, 0)}><Icon n="trash" className="h-4 w-4" /></button></div>)}
+        {cart.map((i) => { const p = current.get(i.id), item = p ? { ...i, name: p.name, price: p.price, image: p.image, emoji: p.emoji, stock: p.stock } : i; return <div key={i.id} className="flex items-center gap-3 rounded-xl border bg-white p-3"><Thumb p={item} cls="h-16 w-16 rounded-lg" />
+          <div className="min-w-0 flex-1"><b className="block truncate text-sm">{item.name}</b><span className="text-sm font-semibold">{money(item.price)}</span>{p && !p.available && <span className="block text-xs font-semibold text-red-600">Unavailable or insufficient stock</span>}</div>
+          <Qty v={i.qty} set={(q) => setQty(i.id, q)} max={Math.max(1, p?.stock ?? i.stock)} /><button aria-label={`Remove ${item.name}`} className="text-neutral-400 hover:text-brand" onClick={() => setQty(i.id, 0)}><Icon n="trash" className="h-4 w-4" /></button></div>;})}
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setCoupon(c.trim().toUpperCase()); }}><input className={inp} placeholder="Coupon code" aria-label="Coupon code" value={c} onChange={(e) => setC(e.target.value)} /><button className={btn2}>Apply</button></form>
         {err && <p role="alert" className="text-sm font-semibold text-red-600">{err}</p>}</section>
         <aside className="h-fit rounded-xl border bg-white p-4 md:col-span-2"><h2 className="mb-3 font-extrabold">Order Summary</h2><Summary sum={sum} /><button className={btn + ' mt-4 w-full py-3'} disabled={!sum} onClick={() => nav('/checkout')}>Checkout</button></aside></div>
@@ -34,6 +40,7 @@ export function Cart() {
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 export function Checkout() {
   const { cart, clearCart, user, toast, coupon } = useStore(); const nav = useNavigate(); const { sum, err: sErr, items } = useSummary();
+  const requestKey = useRef(crypto.randomUUID());
   const [a, setA] = useState({ name: user?.name || '', phone: user?.phone || '', line1: '', area: '', city: '', pincode: '', landmark: '' });
   const [d, setD] = useState({ deliveryDate: today(), deliverySlot: 'ASAP', note: '', method: 'COD' }), [saved, setSaved] = useState([]), [slots, setSlots] = useState([]), [keep, setKeep] = useState(false), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
   useSync(() => { api('/delivery-slots').then(setSlots).catch(() => {}); if (user) api('/addresses').then(setSaved).catch(() => {}); }, [user?._id]);
@@ -42,11 +49,11 @@ export function Checkout() {
     if (!user) return nav('/login');
     setBusy(true); let created;
     try {
-      created = await api('/orders', { method: 'POST', body: { items, coupon: coupon || undefined, method: d.method, address: a, deliveryDate: d.deliveryDate, deliverySlot: d.deliverySlot, note: d.note || undefined } });
+      created = await api('/orders', { method: 'POST', body: { items, coupon: coupon || undefined, method: d.method, address: a, deliveryDate: d.deliveryDate, deliverySlot: d.deliverySlot, note: d.note || undefined, idempotencyKey: requestKey.current } });
       if (keep) api('/addresses', { method: 'POST', body: { ...a, label: 'Home' } }).catch(() => {});
       if (d.method === 'ONLINE') await pay(created.order._id, created.payment);
-      clearCart(); nav('/orders', { state: { placed: created.order.code } });
-    } catch (x) { setErr(x.message); if (created) { clearCart(); toast('Order saved. Complete payment from My Orders.'); nav('/orders'); } } finally { setBusy(false); }
+      clearCart(); toast('Order placed successfully!'); nav('/orders', { state: { placed: created.order.code } });
+    } catch (x) { setErr(x.message); if (created?.order && d.method === 'ONLINE') { toast('Order saved. Complete payment from My Orders.'); nav('/orders'); } } finally { setBusy(false); }
   }
   if (!cart.length) return <Empty />;
   if (!user) return <div className="py-20 text-center"><h1 className="text-2xl font-extrabold">Log in to check out</h1><Link to="/login" className={btn + ' mt-4'}>Login</Link></div>;

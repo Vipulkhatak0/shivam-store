@@ -37,13 +37,13 @@ export const Product = model('Product', productS);
 
 const addr = { name: String, phone: String, line1: String, area: String, city: String, pincode: String, landmark: String };
 export const Order = model('Order', new Schema({
-  code: { type: String, unique: true }, user: id('User'),
+  code: { type: String, unique: true }, idempotencyKey: { type: String, unique: true, sparse: true }, user: id('User'),
   items: [{ product: id('Product'), name: String, price: Number, qty: Number }],
   subtotal: Number, deliveryFee: Number, discount: Number, total: Number, coupon: String,
   address: addr, deliveryDate: String, deliverySlot: String, note: String,
   status: { type: String, default: 'PENDING', enum: ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'] },
   payment: { method: String, status: { type: String, default: 'UNPAID' }, razorpayOrderId: String, paymentId: String, signature: String, amount: Number, test: Boolean },
-  customRequest: id('CustomRequest'), stockRestored: Boolean,
+  customRequest: id('CustomRequest'), stockRestored: Boolean, rejectionReason: String,
   history: [{ status: String, at: { type: Date, default: Date.now } }],
 }, T));
 

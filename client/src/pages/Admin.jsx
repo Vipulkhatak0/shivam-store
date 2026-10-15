@@ -7,7 +7,7 @@ import Chat from './Chat.jsx';
 import NotificationSettings from './NotificationSettings.jsx';
 
 const TABS = [['Dashboard', 'grid'], ['Orders', 'box'], ['Custom Orders', 'cake'], ['Products', 'tag'], ['Categories', 'tag'], ['Customers', 'users'], ['Coupons', 'tag'], ['Messages', 'chat'], ['Settings', 'cog'], ['Notifications', 'bell']];
-const NEXT = { PENDING: ['CONFIRMED', 'REJECTED'], CONFIRMED: ['PREPARING'], PREPARING: ['READY'], READY: ['OUT_FOR_DELIVERY'], OUT_FOR_DELIVERY: ['DELIVERED'] };
+const NEXT = { PENDING: ['CONFIRMED', 'REJECTED'], CONFIRMED: ['PREPARING', 'REJECTED'], PREPARING: ['READY', 'OUT_FOR_DELIVERY', 'REJECTED'], READY: ['OUT_FOR_DELIVERY', 'DELIVERED'], OUT_FOR_DELIVERY: ['DELIVERED'] };
 const sync = () => window.dispatchEvent(new Event('sync'));
 
 function ChangePassword() {
@@ -49,8 +49,8 @@ function Orders() {
     try { await api(`/admin/orders/${o._id}/status`, { method: 'PATCH', body: { status, reason } }); sync(); } catch (e) { toast(e.message); }
   }
   if (!os) return <div className="skeleton h-40" />;
-  return os.length === 0 ? <p className="text-neutral-500">No orders yet.</p> : os.map((o) => <div key={o._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><b>#{o.code} · {o.user?.name}</b><span>{money(o.total)} · {o.payment.method} · {o.payment.status}</span></div>
-    <p className="text-sm text-neutral-600">{o.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}</p><p className="text-sm text-neutral-500">{o.address?.line1}, {o.address?.area}, {o.address?.city} · {o.address?.phone} · {o.deliverySlot}, {o.deliveryDate}{o.note ? ` · “${o.note}”` : ''}</p>
+  return os.length === 0 ? <p className="text-neutral-500">No orders yet.</p> : os.map((o) => <div key={o._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><b>#{o.code} · {o.user?.name}</b><span>{new Date(o.createdAt).toLocaleString()} · {money(o.total)} · {o.payment.method} · {o.payment.status}</span></div>
+    <p className="text-xs text-neutral-500">{o.user?.email} · {o.user?.phone}</p><div className="mt-2 space-y-2">{o.items.map((i, k) => <div key={k} className="flex items-center gap-2 text-sm"><img src={img(i.product?.image || i.product?.images?.[0]) || '/img/special.png'} alt="" className="h-10 w-10 rounded object-contain" /><span>{i.qty} × {i.name} · {money(i.price)} each</span></div>)}</div><p className="mt-2 text-sm text-neutral-500">{o.address?.name}, {o.address?.line1}, {o.address?.area}, {o.address?.city}, {o.address?.pincode} · {o.address?.phone} · {o.deliverySlot}, {o.deliveryDate}{o.note ? ` · “${o.note}”` : ''}</p>
     <Timeline status={o.status} /><div className="mt-2 flex flex-wrap gap-2">{(NEXT[o.status] || []).map((s) => <button key={s} className={s === 'REJECTED' ? btn2 : btn} onClick={() => set(o, s)}>{s === 'CONFIRMED' ? 'Accept' : s === 'REJECTED' ? 'Reject' : 'Mark ' + label(s)}</button>)}{['PENDING', 'CONFIRMED', 'PREPARING'].includes(o.status) && <button className={btn2} onClick={() => set(o, 'CANCELLED')}>Cancel</button>}</div></div>);
 }
 function Custom({ openChat }) {

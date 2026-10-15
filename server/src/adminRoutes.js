@@ -44,15 +44,17 @@ r.get('/dashboard', wrap(async (req, res) => {
 }));
 
 // ---------- orders ----------
-r.get('/orders', wrap(async (req, res) => ok(res, await Order.find(req.query.status ? { status: String(req.query.status) } : {}).sort('-createdAt').limit(100).populate('user', 'name email phone'))));
+r.get('/orders', wrap(async (req, res) => ok(res, await Order.find(req.query.status ? { status: String(req.query.status) } : {}).sort('-createdAt').limit(100).populate('user', 'name email phone').populate('items.product', 'image images'))));
+const ORDER_TRANSITIONS = { PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'], CONFIRMED: ['PREPARING', 'REJECTED', 'CANCELLED'], PREPARING: ['READY', 'OUT_FOR_DELIVERY', 'REJECTED', 'CANCELLED'], READY: ['OUT_FOR_DELIVERY', 'DELIVERED'], OUT_FOR_DELIVERY: ['DELIVERED'] };
 const TEXT = { CONFIRMED: 'has been accepted', PREPARING: 'is now being prepared', READY: 'is ready', OUT_FOR_DELIVERY: 'is out for delivery', DELIVERED: 'has been delivered', CANCELLED: 'was cancelled', REJECTED: 'was rejected' };
 r.patch('/orders/:id/status', validate(z.object({ status: z.enum(Object.keys(TEXT)), reason: z.string().max(200).optional() })), wrap(async (req, res) => {
   const o = await Order.findById(req.params.id);
   if (!o) throw new AppError('Order not found.', 'NOT_FOUND', 404);
-  if (['DELIVERED', 'CANCELLED', 'REJECTED'].includes(o.status)) throw new AppError('This order is already closed.', 'ORDER_CLOSED');
   const s = req.body.status;
+  if (!(ORDER_TRANSITIONS[o.status] || []).includes(s)) throw new AppError(`Cannot change an order from ${o.status} to ${s}.`, 'INVALID_STATUS_TRANSITION', 409);
   if (s === 'REJECTED' && !req.body.reason) throw new AppError('Please give a reason for rejecting.', 'REASON_REQUIRED');
   if (['CANCELLED', 'REJECTED'].includes(s)) await restoreStock(o);
+  if (s === 'REJECTED') o.rejectionReason = req.body.reason;
   if (s === 'DELIVERED' && o.payment.method === 'COD') o.payment.status = 'PAID';
   logStatus(o, s); await o.save(); await audit(req, `Order ${o.code} → ${s}`, o._id);
   const type = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' ? 'ORDER_REJECTED' : s === 'CANCELLED' ? 'ORDER_CANCELLED' : 'ORDER_STATUS';

@@ -42,6 +42,7 @@ export default function Orders() {
         : orders.map((o) => <div key={o._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex items-center justify-between"><b>#{o.code}</b><span className="text-sm text-neutral-500">{new Date(o.createdAt).toLocaleDateString()}</span></div>
           <ul className="mt-1 text-sm text-neutral-700">{o.items.map((i, k) => <li key={k}>{i.qty} × {i.name}{o.status === 'DELIVERED' && i.product && <Review item={i} />}</li>)}</ul>
           <p className="mt-1 text-sm"><b>{money(o.total)}</b> · {o.payment.method === 'COD' ? 'Cash on delivery' : o.payment.status === 'PAID' ? 'Paid online' : 'Payment pending'} · {o.deliverySlot}, {o.deliveryDate}</p>
+          {o.status === 'REJECTED' && o.rejectionReason && <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">Reason: {o.rejectionReason}. Contact the store if you need help.</p>}
           <Timeline status={o.status} />
           <div className="mt-3 flex flex-wrap gap-2">{o.payment.method === 'ONLINE' && o.payment.status !== 'PAID' && o.status === 'PENDING' && o.payment.test && <button className={btn} onClick={() => retryPay(o)}>Complete test payment</button>}
             {['PENDING', 'CONFIRMED'].includes(o.status) && <button className={btn2} onClick={() => cancel(o)}>Cancel order</button>}
