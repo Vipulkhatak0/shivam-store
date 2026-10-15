@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, img } from '../api.js';
 import { useStore } from '../store.js';
 import { money, btn, btn2, inp, Badge, Timeline, label, useSync, Icon, Logo } from '../ui.jsx';
@@ -42,14 +42,15 @@ function Dash({ go }) {
         {d.recent.length === 0 && <tr><td colSpan="6" className="p-6 text-center text-neutral-500">No orders yet.</td></tr>}</tbody></table></div></>;
 }
 function Orders() {
-  const [os, setOs] = useState(null), [msg, setMsg] = useState(''); const toast = useStore((s) => s.toast);
+  const [os, setOs] = useState(null); const toast = useStore((s) => s.toast); const loc=useLocation(), target=new URLSearchParams(loc.search).get('order');
   useSync(() => { api('/admin/orders').then(setOs).catch(() => setOs([])); }, []);
+  useEffect(()=>{if(target&&os?.length)document.getElementById(`order-${target}`)?.scrollIntoView({behavior:'smooth',block:'center'});},[target,os]);
   async function set(o, status) {
     let reason; if (status === 'REJECTED') { reason = prompt('Reason for rejecting this order?'); if (!reason) return; }
     try { await api(`/admin/orders/${o._id}/status`, { method: 'PATCH', body: { status, reason } }); sync(); } catch (e) { toast(e.message); }
   }
   if (!os) return <div className="skeleton h-40" />;
-  return os.length === 0 ? <p className="text-neutral-500">No orders yet.</p> : os.map((o) => <div key={o._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><b>#{o.code} · {o.user?.name}</b><span>{new Date(o.createdAt).toLocaleString()} · {money(o.total)} · {o.payment.method} · {o.payment.status}</span></div>
+  return os.length === 0 ? <p className="text-neutral-500">No orders yet.</p> : os.map((o) => <div id={`order-${o._id}`} key={o._id} className={'mb-3 rounded-xl border bg-white p-4 ' + (target===String(o._id)?'ring-2 ring-brand':'')}><div className="flex flex-wrap items-center justify-between gap-2"><b>#{o.code} · {o.user?.name}</b><span>{new Date(o.createdAt).toLocaleString()} · {money(o.total)} · {o.payment.method} · {o.payment.status}</span></div>
     <p className="text-xs text-neutral-500">{o.user?.email} · {o.user?.phone}</p><div className="mt-2 space-y-2">{o.items.map((i, k) => <div key={k} className="flex items-center gap-2 text-sm"><img src={img(i.product?.image || i.product?.images?.[0]) || '/img/special.png'} alt="" className="h-10 w-10 rounded object-contain" /><span>{i.qty} × {i.name} · {money(i.price)} each</span></div>)}</div><p className="mt-2 text-sm text-neutral-500">{o.address?.name}, {o.address?.line1}, {o.address?.area}, {o.address?.city}, {o.address?.pincode} · {o.address?.phone} · {o.deliverySlot}, {o.deliveryDate}{o.note ? ` · “${o.note}”` : ''}</p>
     <Timeline status={o.status} /><div className="mt-2 flex flex-wrap gap-2">{(NEXT[o.status] || []).map((s) => <button key={s} className={s === 'REJECTED' ? btn2 : btn} onClick={() => set(o, s)}>{s === 'CONFIRMED' ? 'Accept' : s === 'REJECTED' ? 'Reject' : 'Mark ' + label(s)}</button>)}{['PENDING', 'CONFIRMED', 'PREPARING'].includes(o.status) && <button className={btn2} onClick={() => set(o, 'CANCELLED')}>Cancel</button>}</div></div>);
 }
@@ -192,14 +193,19 @@ function Settings() {
       <p className="mt-3 text-xs text-neutral-500">Delivery fee, free-delivery threshold and minimum order are set in the server's .env (DELIVERY_FEE, FREE_DELIVERY_ABOVE, MIN_ORDER).</p></div>
     <div className="rounded-xl border bg-white p-4 lg:col-span-2"><h2 className="mb-2 font-extrabold">Admin activity log</h2>{log.length === 0 && <p className="text-sm text-neutral-500">No activity yet.</p>}{log.slice(0, 20).map((l) => <div key={l._id} className="border-t py-1 text-sm"><b>{l.admin?.name}</b> {l.action} <span className="text-xs text-neutral-400">{new Date(l.createdAt).toLocaleString()}</span></div>)}</div></div>;
 }
+function AdminNotifications() {
+  const { notes, unread, readAll, readOne, deleteNote } = useStore(); const nav=useNavigate();
+  return <div className="space-y-5"><NotificationSettings/><section className="max-w-2xl rounded-xl border bg-white p-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-extrabold">Notification history · {unread} unread</h2><button className="text-sm font-semibold text-brand" onClick={readAll}>Mark all as read</button></div>{notes.length===0?<p className="text-sm text-neutral-500">No notifications yet.</p>:notes.map((n)=><div key={n._id} className={'border-t py-3 text-sm '+(!n.read?'bg-brand-soft/50':'')}><b>{n.title}</b><p className="text-neutral-700">{n.message}</p><div className="mt-1 flex gap-3 text-xs">{n.data?.url&&<button className="font-bold text-brand" onClick={()=>nav(n.data.url)}>Open</button>}{!n.read&&<button className="font-semibold text-brand" onClick={()=>readOne(n._id)}>Mark read</button>}<button className="text-neutral-500" onClick={()=>deleteNote(n._id)}>Delete</button><span className="text-neutral-400">{new Date(n.createdAt).toLocaleString()}</span></div></div>)}</section></div>;
+}
 export default function Admin() {
-  const { user, ready, logout } = useStore(); const nav = useNavigate(); const [tab, setTab] = useState('Dashboard'), [open, setOpen] = useState(false), [chatWith, setChatWith] = useState(null);
+  const { user, ready, logout, unread } = useStore(); const nav = useNavigate(); const [searchParams]=useSearchParams(); const [tab, setTab] = useState(()=>TABS.some(([name])=>name===searchParams.get('tab'))?searchParams.get('tab'):'Dashboard'), [open, setOpen] = useState(false), [chatWith, setChatWith] = useState(null);
+  useEffect(()=>{const requested=searchParams.get('tab');if(TABS.some(([name])=>name===requested))setTab(requested);},[searchParams.toString()]);
   if (!ready) return null;
   if (!user || user.role !== 'ADMIN') return <Navigate to="/admin/login" />;
   if (user.mustChangePassword) return <ChangePassword />;
   const go = (t) => { setTab(t); setOpen(false); };
   const Side = <><div className="flex items-center gap-2 p-4"><img src="/img/logo.png" alt="" className="h-11 w-11 object-contain" /><div className="leading-tight"><b className="block text-white">Shivam <span className="text-brand">Store</span></b><span className="text-[11px] text-neutral-400">Admin Panel</span></div></div>
-    <nav className="flex-1 space-y-1 px-3" aria-label="Admin">{TABS.map(([t, ic]) => <button key={t} onClick={() => go(t)} className={'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold ' + (tab === t ? 'bg-brand text-white' : 'text-neutral-300 hover:bg-white/10')}><Icon n={ic} className="h-4 w-4" />{t}</button>)}</nav>
+    <nav className="flex-1 space-y-1 px-3" aria-label="Admin">{TABS.map(([t, ic]) => <button key={t} onClick={() => go(t)} className={'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold ' + (tab === t ? 'bg-brand text-white' : 'text-neutral-300 hover:bg-white/10')}><Icon n={ic} className="h-4 w-4" />{t}{t==='Notifications'&&unread>0&&<span className="ml-auto rounded bg-white/20 px-1.5 text-xs">{unread}</span>}</button>)}</nav>
     <button onClick={() => { logout(); nav('/'); }} className="m-3 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-neutral-300 hover:bg-white/10"><Icon n="logout" className="h-4 w-4" />Logout</button></>;
   return (<div className="min-h-screen bg-neutral-50 md:flex">
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col bg-[#222] md:flex">{Side}</aside>
@@ -207,5 +213,5 @@ export default function Admin() {
     <section className="min-w-0 flex-1 p-4 md:p-6"><div className="mb-4 flex items-center justify-between"><h1 className="flex items-center gap-2 text-2xl font-extrabold"><button className="md:hidden" aria-label="Open menu" onClick={() => setOpen(true)}><Icon n="menu" className="h-6 w-6" /></button>{tab}</h1>
       <button className={btn + ' hidden sm:inline-flex'} onClick={() => go('Products')}><Icon n="plus" className="h-4 w-4" />Add Product</button></div>
       {tab === 'Dashboard' && <Dash go={go} />}{tab === 'Orders' && <Orders />}{tab === 'Custom Orders' && <Custom openChat={(id) => { setChatWith(id); setTab('Messages'); }} />}
-      {tab === 'Products' && <Products />}{tab === 'Categories' && <Categories />}{tab === 'Customers' && <Customers />}{tab === 'Coupons' && <Coupons />}{tab === 'Messages' && <Messages pick={chatWith} />}{tab === 'Banner Management' && <BannerManagement />}{tab === 'Settings' && <Settings />}{tab === 'Notifications'&&<NotificationSettings/>}</section></div>);
+      {tab === 'Products' && <Products />}{tab === 'Categories' && <Categories />}{tab === 'Customers' && <Customers />}{tab === 'Coupons' && <Coupons />}{tab === 'Messages' && <Messages pick={chatWith} />}{tab === 'Banner Management' && <BannerManagement />}{tab === 'Settings' && <Settings />}{tab === 'Notifications'&&<AdminNotifications/>}</section></div>);
 }

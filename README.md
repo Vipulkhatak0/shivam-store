@@ -68,6 +68,12 @@ PORT=5000
 
 The server can also use optional settings for Google sign-in, Razorpay, Cloudinary, SMTP email, delivery fees, and store time zone. Those integrations need their corresponding credentials to work. Keep real secrets in your local environment; do not commit them.
 
+### Web Push notifications
+
+Offline Web Push requires a VAPID key pair and an HTTPS site. Generate a pair with `npx web-push generate-vapid-keys`, then add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` to the Render service environment. Keep the private key only on Render. Set the matching public key as `VITE_VAPID_PUBLIC_KEY` in the Vercel project before building the client. Keep the existing `VITE_API_URL` pointed at the Render API origin.
+
+Customers can enable push from Account → Notifications after granting browser permission. Android Chrome supports browser push over HTTPS; on iPhone/iPad, add the site to the Home Screen and open it from that icon before enabling push. Push delivery depends on browser and operating-system support, connectivity, and notification permission; delivery time is not guaranteed. Subscriptions are stored per device and invalid subscriptions are removed when the push service reports that they have expired.
+
 ### Start the app
 
 Run both the API and the Vite development server from the root:

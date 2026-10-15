@@ -27,7 +27,7 @@ const productS = new Schema({
   category: id('Category'), image: String, images: [String], emoji: String, brand: String, condition: String,
   price: { type: Number, min: 0, required: true }, comparePrice: { type: Number, min: 0 },
   stock: { type: Number, min: 0, default: 0 }, unit: { type: String, default: 'pc' },
-  active: { type: Boolean, default: true }, featured: Boolean, popular: Boolean,
+  active: { type: Boolean, default: true }, notificationPublishedAt: Date, featured: Boolean, popular: Boolean,
   customizable: Boolean, eggless: Boolean, tags: [String],
   rating: { type: Number, default: 0 }, reviewCount: { type: Number, default: 0 },
 }, T);
@@ -55,11 +55,13 @@ export const CustomRequest = model('CustomRequest', new Schema({
   status: { type: String, default: 'PENDING', enum: ['PENDING', 'ACCEPTED', 'REJECTED', 'PAID'] },
 }, T));
 
-export const Notification = model('Notification', new Schema({
-  user: id('User'), type: String, title: String, message: String, data: Object, read: { type: Boolean, default: false },
-}, T));
-const prefS = new Schema({ user: { ...id('User'), unique: true, index: true }, push: { enabled: { type: Boolean, default: true } }, sound: { enabled: { type: Boolean, default: true }, soundId: { type: String, default: 'universfield' }, volume: { type: Number, min: 0, max: 1, default: 0.7 } }, notifications: { type: Schema.Types.Mixed, default: {} }, email: { type: Schema.Types.Mixed, default: {} } }, T);
+const notificationS = new Schema({ user: id('User'), type: String, title: String, message: String, data: Object, dedupeKey: String, read: { type: Boolean, default: false } }, T);
+notificationS.index({ user: 1, dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } });
+export const Notification = model('Notification', notificationS);
+const prefS = new Schema({ user: { ...id('User'), unique: true, index: true }, inApp: { enabled: { type: Boolean, default: true } }, push: { enabled: { type: Boolean, default: false } }, sound: { enabled: { type: Boolean, default: true }, soundId: { type: String, default: 'universfield' }, volume: { type: Number, min: 0, max: 1, default: 0.7 } }, notifications: { type: Schema.Types.Mixed, default: {} }, email: { type: Schema.Types.Mixed, default: {} } }, T);
 export const NotificationPreference = model('NotificationPreference', prefS);
+const pushDeviceS = new Schema({ user: { ...id('User'), index: true }, endpoint: { type: String, unique: true }, keys: { p256dh: String, auth: String }, expirationTime: Number }, T);
+export const PushDevice = model('PushDevice', pushDeviceS);
 export const Message = model('Message', new Schema({
   customer: id('User'), senderRole: String, sender: id('User'), text: String, attachments: [String], read: { type: Boolean, default: false },
 }, T));

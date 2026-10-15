@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, img, pay } from '../api.js';
 import { useStore } from '../store.js';
@@ -14,7 +14,9 @@ function Review({ item }) {
 }
 export default function Orders() {
   const { user, toast, add } = useStore(); const loc = useLocation(); const nav = useNavigate(); const [orders, setOrders] = useState(null), [reqs, setReqs] = useState([]), [chat, setChat] = useState(false), [busy, setBusy] = useState('');
+  const target=new URLSearchParams(loc.search).get('order');
   useSync(() => { if (!user) return; api('/orders').then(setOrders).catch(() => setOrders([])); api('/custom-orders').then(setReqs).catch(() => {}); }, [user?._id]);
+  useEffect(()=>{if(target&&orders?.length)document.getElementById(`order-${target}`)?.scrollIntoView({behavior:'smooth',block:'center'});},[target,orders]);
   if (!user) return <Navigate to="/login" />;
   async function payReq(r, method) {
     setBusy(r._id);
@@ -39,7 +41,7 @@ export default function Orders() {
         {r.status === 'REJECTED' && <p className="mt-2 text-sm text-red-700">Declined: {r.rejectReason}</p>}</div>)}{ChatBox}</section>}
     <section><h1 className="mb-3 text-2xl font-extrabold">My orders</h1>
       {!orders ? <div className="skeleton h-32" /> : orders.length === 0 ? <div className="py-12 text-center text-neutral-500">No orders yet. <Link to="/shop" className="font-semibold text-brand">Start shopping</Link></div>
-        : orders.map((o) => <div key={o._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex items-center justify-between"><b>#{o.code}</b><span className="text-sm text-neutral-500">{new Date(o.createdAt).toLocaleDateString()}</span></div>
+        : orders.map((o) => <div id={`order-${o._id}`} key={o._id} className={'mb-3 rounded-xl border bg-white p-4 ' + (target===String(o._id)?'ring-2 ring-brand':'')}><div className="flex items-center justify-between"><b>#{o.code}</b><span className="text-sm text-neutral-500">{new Date(o.createdAt).toLocaleDateString()}</span></div>
           <ul className="mt-1 text-sm text-neutral-700">{o.items.map((i, k) => <li key={k}>{i.qty} × {i.name}{o.status === 'DELIVERED' && i.product && <Review item={i} />}</li>)}</ul>
           <p className="mt-1 text-sm"><b>{money(o.total)}</b> · {o.payment.method === 'COD' ? 'Cash on delivery' : o.payment.status === 'PAID' ? 'Paid online' : 'Payment pending'} · {o.deliverySlot}, {o.deliveryDate}</p>
           {o.status === 'REJECTED' && o.rejectionReason && <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">Reason: {o.rejectionReason}. Contact the store if you need help.</p>}

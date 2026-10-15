@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { User, Notification, AuditLog, NotificationPreference } from './models.js';
 import { defaultsFor, TYPES } from './notificationDefaults.js';
 import { notificationTemplate } from './notifications.js';
+import { sendPushToUser } from './push.js';
 
 export class AppError extends Error {
   constructor(message, errorCode = 'BAD_REQUEST', status = 400) { super(message); this.errorCode = errorCode; this.status = status; }
@@ -38,8 +39,21 @@ export async function notify(userId, type, title, message, data = {}) {
   const defaults = defaultsFor(user.role), enabled = pref?.notifications?.[type] ?? defaults.notifications[type] ?? true;
   if (!enabled) return null;
   if (data?.template) [title, message] = notificationTemplate(user.role, type, data);
-  const n = await Notification.create({ user: userId, type, title, message, data });
-  io.to(`user:${userId}`).emit('notification:new', n);
+  const cleanData = { ...data }; delete cleanData.template;
+  if (!cleanData.url) {
+    if (cleanData.orderId) cleanData.url = user.role === 'ADMIN' ? `/admin?tab=Orders&order=${encodeURIComponent(cleanData.orderId)}` : `/orders?order=${encodeURIComponent(cleanData.orderId)}`;
+    else if (cleanData.slug) cleanData.url = `/product/${encodeURIComponent(cleanData.slug)}`;
+  }
+  const dedupeKey = cleanData.dedupeKey || (cleanData.orderId ? `${cleanData.orderId}:${type}:${cleanData.status || ''}` : type === 'NEW_PRODUCT' && cleanData.slug ? `${type}:${cleanData.slug}` : undefined);
+  let n;
+  try { n = await Notification.create({ user: userId, type, title, message, data: cleanData, dedupeKey }); }
+  catch (e) { if (e.code !== 11000 || !dedupeKey) throw e; return Notification.findOne({ user: userId, dedupeKey }); }
+  if (pref?.inApp?.enabled !== false) io.to(`user:${userId}`).emit('notification:new', n);
+  if (user.role === 'CUSTOMER' && pref?.push?.enabled === true) {
+    const payload = { title, body: message, icon: '/favicon.png', badge: '/favicon.png', tag: dedupeKey || String(n._id), showWhenVisible: pref?.inApp?.enabled === false, data: { url: cleanData.url || '/', type } };
+    if (type === 'NEW_PRODUCT' && cleanData.image) payload.image = cleanData.image;
+    sendPushToUser(userId, payload).catch((e) => console.error('Web Push preparation failed:', e.message));
+  }
   if (EMAIL_TYPES.has(type)) emailUser(userId, type, title, message).catch((e) => console.error('Email failed:', e.message));
   return n;
 }

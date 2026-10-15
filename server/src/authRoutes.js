@@ -40,7 +40,7 @@ r.post('/verify-otp', validate(z.object({ email, otp: z.string().length(6) })), 
   u.otpTries += 1;
   if (!(await bcrypt.compare(req.body.otp, u.otp))) { await u.save(); throw new AppError('Incorrect code.', 'OTP_INVALID'); }
   u.verified = true; u.otp = undefined; u.otpExpires = undefined; await u.save();
-  await notifyAdmins('NEW_CUSTOMER','','',{template:true,customerName:u.name});
+  try { await notifyAdmins('NEW_CUSTOMER','','',{template:true,customerName:u.name}); } catch (e) { console.error('New customer notification failed:', e.message); }
   ok(res, {}, 'Email verified. You can log in now.');
 }));
 

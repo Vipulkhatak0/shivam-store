@@ -8,9 +8,22 @@
     "seed": "node src/seed.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3", "cloudinary": "^2.2.0", "google-auth-library": "^9.11.0", "cors": "^2.8.5", "dotenv": "^16.4.5", "express": "^4.19.2",
-    "express-mongo-sanitize": "^2.2.0", "express-rate-limit": "^7.3.1", "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.2", "mongoose": "^8.4.1", "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.13", "razorpay": "^2.9.4", "socket.io": "^4.7.5", "zod": "^3.23.8"
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.3.1",
+    "google-auth-library": "^9.11.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.1",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.13",
+    "razorpay": "^2.9.4",
+    "socket.io": "^4.7.5",
+    "web-push": "^3.6.7",
+    "zod": "^3.23.8"
   }
 }

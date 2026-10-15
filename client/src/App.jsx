@@ -16,13 +16,13 @@ function Bell() {
   const { notes, unread, readAll } = useStore(); const [open, setOpen] = useState(false); const nav = useNavigate();
   return (
     <div className="relative">
-      <button aria-label={`Notifications, ${unread} unread`} className="relative rounded-md p-2 hover:bg-neutral-100" onClick={() => { setOpen(!open); if (!open && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }}>
+      <button aria-label={`Notifications, ${unread} unread`} className="relative rounded-md p-2 hover:bg-neutral-100" onClick={() => { setOpen(!open); }}>
         <Icon n="bell" />{unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-md bg-brand px-1 text-center text-[11px] font-bold text-white">{unread}</span>}
       </button>
       {open && <div className="absolute right-0 z-40 mt-2 max-h-96 w-80 max-w-[88vw] overflow-auto rounded-xl border bg-white p-2 shadow-xl">
         <div className="flex items-center justify-between p-2"><b>Notifications</b><button className="text-sm font-semibold text-brand" onClick={readAll}>Mark all as read</button></div>
         {notes.length === 0 && <p className="p-3 text-sm text-neutral-500">Nothing yet.</p>}
-        {notes.map((n, i) => <button key={n._id || i} onClick={() => { setOpen(false); nav(n.type === 'NEW_MESSAGE' ? '/orders' : n.data?.slug ? `/product/${n.data.slug}` : '/orders'); }} className={'block w-full rounded-lg p-2 text-left text-sm hover:bg-neutral-50 ' + (n.read ? '' : 'bg-brand-soft')}><b>{n.title}</b><div className="text-neutral-600">{n.message}</div></button>)}
+        {notes.map((n, i) => <button key={n._id || i} onClick={() => { setOpen(false); nav(n.data?.url || (n.type === 'NEW_MESSAGE' ? '/orders' : n.data?.slug ? `/product/${n.data.slug}` : '/orders')); }} className={'block w-full rounded-lg p-2 text-left text-sm hover:bg-neutral-50 ' + (n.read ? '' : 'bg-brand-soft')}><b>{n.title}</b><div className="text-neutral-600">{n.message}</div></button>)}
       </div>}
     </div>);
 }
@@ -78,10 +78,7 @@ export default function App() {
   useEffect(() => {
     boot();
     api('/categories').catch(() => setOffline(true));
-    // remove any stale service worker left over from another project on this port
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
-    }
+    if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     // re-read the user (and role) from the server whenever you return to the tab
     const onFocus = () => refreshUser();
     window.addEventListener('focus', onFocus);

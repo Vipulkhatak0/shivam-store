@@ -13,7 +13,9 @@ export function notificationTemplate(role, type, data = {}) {
     ORDER_REJECTED: ['Order rejected', `Your order has been rejected. ${order}.${data.reason ? ` Reason: ${data.reason}` : ''}`, { orderId: data.orderId, reason: data.reason }],
     ORDER_STATUS: data.status === 'has been delivered'
       ? ['Order delivered', `Your order has been delivered! ${order} is delivered.`, { orderId: data.orderId, status: 'DELIVERED' }]
-      : ['Order update', `Your order ${order} is ${status}.`, { orderId: data.orderId, status: data.status }],
+      : data.status === 'is out for delivery'
+        ? ['Out for delivery', `Your order is out for delivery! ${order}`, { orderId: data.orderId, status: 'OUT_FOR_DELIVERY' }]
+        : ['Order update', `Your order ${order} is ${status}.`, { orderId: data.orderId, status: data.status }],
     ORDER_CANCELLED: admin ? ['Order cancelled', `Order ${order} has been cancelled by the customer.`] : ['Order cancelled', `Your order ${order} has been cancelled.`],
     CUSTOM_ORDER: admin ? ['New custom order', `${who} submitted a new custom cake request.`] : ['Custom order update', 'Your custom cake request was submitted.'],
     CUSTOM_REQUEST: admin ? ['New custom order', `${who} submitted a new custom cake request.`] : ['Custom order update', 'Your custom cake request was submitted.'],

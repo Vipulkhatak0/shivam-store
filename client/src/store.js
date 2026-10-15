@@ -48,7 +48,7 @@ export const useStore = create(persist((set, get) => ({
     socket.on('notification:new', (n) => {
       set((s) => ({ notes: [n, ...s.notes], unread: s.unread + 1 })); const toastId=get().toast(`${n.title} ${n.message}`,{notification:true});
       const prefs=get().notificationPrefs; playNotificationSound(prefs,toastId);
-      if (prefs?.push?.enabled!==false && 'Notification' in window && Notification.permission === 'granted') new Notification(n.title, { body: n.message });
+      if (prefs?.push?.enabled===true && 'Notification' in window && Notification.permission === 'granted') new Notification(n.title, { body: n.message });
     });
     ['order:created', 'custom-order:new'].forEach((ev) => socket.on(ev, () => window.dispatchEvent(new Event('sync'))));
     ['order:updated', 'custom-order:updated', 'chat:message', 'inventory:updated'].forEach((ev) => socket.on(ev, () => window.dispatchEvent(new Event('sync'))));

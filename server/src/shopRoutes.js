@@ -137,13 +137,16 @@ async function startPayment(order) {
 }
 async function announce(order, paid) {
   if (order.customRequest) {
-    const cr = await CustomRequest.findById(order.customRequest);
-    if (cr && (paid || order.payment.method === 'COD')) { cr.status = 'PAID'; await cr.save(); emitAdmin('custom-order:updated', cr); }
+    try { const cr = await CustomRequest.findById(order.customRequest); if (cr && (paid || order.payment.method === 'COD')) { cr.status = 'PAID'; await cr.save(); emitAdmin('custom-order:updated', cr); } }
+    catch (e) { console.error('Custom order notification update failed:', e.message); }
   }
-  const customer=await User.findById(order.user).select('name');
-  await notifyAdmins('ORDER_PLACED', '', '', { template:true, orderNumber:order.code, customerName:customer?.name, total:order.total, orderId: order._id }, 'order:created', order);
-  if(paid) await notifyAdmins('PAYMENT_SUCCESS','','',{template:true,orderNumber:order.code,customerName:customer?.name,total:order.total,orderId:order._id});
-  await notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', '', '', { template:true, orderNumber:order.code, total:order.total, orderId: order._id });
+  const customerName=order.address?.name||'A customer';
+  const tasks=[
+    notifyAdmins('ORDER_PLACED', '', '', { template:true, orderNumber:order.code, customerName, total:order.total, orderId: order._id }, 'order:created', order),
+    notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', '', '', { template:true, orderNumber:order.code, total:order.total, orderId: order._id }),
+  ];
+  if(paid)tasks.push(notifyAdmins('PAYMENT_SUCCESS','','',{template:true,orderNumber:order.code,customerName,total:order.total,orderId:order._id}));
+  const results=await Promise.allSettled(tasks);for(const r of results)if(r.status==='rejected')console.error('Order notification delivery failed:',r.reason?.message||'database or transport error');
 }
 async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupon, total, address, deliveryDate, deliverySlot, note, method, customRequest, idempotencyKey }) {
   const taken = [];

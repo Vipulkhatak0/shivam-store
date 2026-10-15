@@ -58,7 +58,8 @@ r.patch('/orders/:id/status', validate(z.object({ status: z.enum(Object.keys(TEX
   if (s === 'DELIVERED' && o.payment.method === 'COD') o.payment.status = 'PAID';
   logStatus(o, s); await o.save(); await audit(req, `Order ${o.code} → ${s}`, o._id);
   const type = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' ? 'ORDER_REJECTED' : s === 'CANCELLED' ? 'ORDER_CANCELLED' : 'ORDER_STATUS';
-  await notify(o.user, type, '', '', { template:true, orderNumber:o.code, status:TEXT[s], orderId:o._id, ...(req.body.reason&&{reason:req.body.reason}) });
+  try { await notify(o.user, type, '', '', { template:true, orderNumber:o.code, status:TEXT[s], orderId:o._id, ...(req.body.reason&&{reason:req.body.reason}) }); }
+  catch (e) { console.error('Order notification persistence failed:', e.message); }
   emitUser(o.user, 'order:updated', o); emitAdmin('order:updated', o); ok(res, o);
 }));
 
@@ -108,21 +109,32 @@ const prodSchema = z.object({
   featured: bool, popular: bool, customizable: bool, eggless: bool, active: bool.default(true),
   tags: z.preprocess((v) => (typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : v || []), z.array(z.string())), mainImageIndex: z.coerce.number().int().min(0).optional(),
 });
+async function announcePublishedProduct(p) {
+  const cursor = User.find({ role: 'CUSTOMER', active: true, verified: true }).select('_id').lean().cursor();
+  let batch = [], failures = 0;
+  const sendBatch = async () => {
+    const results = await Promise.allSettled(batch.map((c) => notify(c._id, 'NEW_PRODUCT', 'New at Shivam Store', `New at Shivam Store! Check out ${p.name}. Price INR ${p.price}.`, { slug: p.slug, productId: p._id, image: p.image || p.images?.[0], price: p.price, url: `/product/${p.slug}`, dedupeKey: `NEW_PRODUCT:${p._id}` })));
+    failures += results.filter((x) => x.status === 'rejected').length; batch = [];
+  };
+  for await (const c of cursor) { batch.push(c); if (batch.length >= 50) await sendBatch(); }
+  if (batch.length) await sendBatch();
+  if (failures) console.error(`New product notifications failed for ${failures} customer account(s).`);
+}
 r.get('/products', wrap(async (req, res) => ok(res, await Product.find().populate('category', 'name').sort('-createdAt').limit(200))));
 r.post('/products', upload.fields([{name:'images',maxCount:8},{name:'image',maxCount:1}]), validate(prodSchema), wrap(async (req, res) => {
   const files=[...(req.files?.images||[]),...(req.files?.image||[])]; if(files.length>8) throw new AppError('Upload up to 8 product images.','INVALID_FILE',422);
   const images=(await Promise.all(files.map(storeFile))).filter(Boolean); const main=images[req.body.mainImageIndex||0]||images[0];
-  const p = await Product.create({ ...req.body, slug: slug(req.body.name), image: main, images });
+  const p = await Product.create({ ...req.body, slug: slug(req.body.name), image: main, images, ...(req.body.active && { notificationPublishedAt: new Date() }) });
   await audit(req, `Added product ${p.name}`, p._id);
-  // Notify every active customer in real time (and keep it in their notification history).
-  const customers = await User.find({ role: 'CUSTOMER', active: true, verified: true }).select('_id');
-  for(const c of customers) await notify(c._id,'NEW_PRODUCT','New at Shivam Store',`${p.name} is now available for ₹${p.price}.`,{slug:p.slug});
+  if (p.active) await announcePublishedProduct(p).catch((e) => console.error('New product notification batch failed:', e.message));
   emitAdmin('inventory:updated', { id: p._id, stock: p.stock });
   ok(res, p, 'Product added.', 201);
 }));
 r.put('/products/:id', upload.fields([{name:'images',maxCount:8},{name:'image',maxCount:1}]), validate(prodSchema.partial()), wrap(async (req, res) => {
   const p = await Product.findById(req.params.id); if (!p) throw new AppError('Product not found.', 'NOT_FOUND', 404);
-  const files=[...(req.files?.images||[]),...(req.files?.image||[])]; Object.assign(p, req.body); if(files.length){p.images=await Promise.all(files.map(storeFile));p.image=p.images[req.body.mainImageIndex||0]||p.images[0];} await p.save();
+  const wasActive=Boolean(p.active), files=[...(req.files?.images||[]),...(req.files?.image||[])]; Object.assign(p, req.body); if(files.length){p.images=await Promise.all(files.map(storeFile));p.image=p.images[req.body.mainImageIndex||0]||p.images[0];}
+  const newlyPublished=Boolean(!wasActive&&p.active&&!p.notificationPublishedAt);if(newlyPublished)p.notificationPublishedAt=new Date();await p.save();
+  if(newlyPublished)await announcePublishedProduct(p).catch((e)=>console.error('New product notification batch failed:',e.message));
   await audit(req, `Edited product ${p.name} (₹${p.price}, stock ${p.stock})`, p._id); emitAdmin('inventory:updated', { id: p._id, stock: p.stock }); ok(res, p);
 }));
 r.delete('/products/:id', wrap(async (req, res) => {
