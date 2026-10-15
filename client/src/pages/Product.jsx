@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, img } from '../api.js';
 import { useStore } from '../store.js';
 import { Thumb, money, btn, btn2, inp, Field, useSync, useSeo, NotFound, Icon, Qty } from '../ui.jsx';
+import ProductRecommendations from '../components/ProductRecommendations.jsx';
 
 const SIZES = [0.5, 1, 1.5, 2, 3], FLAVORS = ['Chocolate', 'Vanilla', 'Butterscotch', 'Red Velvet', 'Black Forest', 'Pineapple', 'Strawberry'];
 const TOPS = ['Strawberry', 'Chocolate', 'Oreo', 'KitKat', 'Ferrero', 'Nuts'], TIMES = ['10:00 AM', '12:00 PM', '2:00 PM', '4:00 PM', '6:00 PM', '8:00 PM'];
@@ -37,7 +38,7 @@ function Customize({ p }) {
         <Field l="Theme"><select className={inp} value={c.theme} onChange={(e) => set('theme', e.target.value)}>{['Birthday', 'Anniversary', 'Wedding', 'Kids', 'Custom'].map((t) => <option key={t}>{t}</option>)}</select></Field></div>
       <Field l="Egg preference"><div className="flex gap-2"><Chip on={c.eggless} onClick={() => set('eggless', true)}>Eggless</Chip><Chip on={!c.eggless} onClick={() => set('eggless', false)}>Egg</Chip></div></Field>
       <Field l="Toppings (₹40 each)"><div className="flex flex-wrap gap-2">{TOPS.map((t) => <Chip key={t} on={c.toppings.includes(t)} onClick={() => set('toppings', c.toppings.includes(t) ? c.toppings.filter((x) => x !== t) : [...c.toppings, t])}>{t}</Chip>)}</div></Field>
-      <Field l="Message on cake"><input className={inp} maxLength={60} placeholder="Happy Birthday Vipul" value={c.message} onChange={(e) => set('message', e.target.value)} /></Field>
+      <Field l="Message on cake"><input className={inp} maxLength={60} placeholder="Happy Birthday" value={c.message} onChange={(e) => set('message', e.target.value)} /></Field>
       <Field l="Reference photo (optional)"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setPhoto(e.target.files[0])} /></Field>
       <Field l="Additional instructions"><textarea className={inp} rows={2} maxLength={400} value={c.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -51,17 +52,17 @@ function Customize({ p }) {
     </form>);
 }
 export default function Product() {
-  const { slug } = useParams(); const [p, setP] = useState(undefined), [revs, setRevs] = useState([]), [q, setQ] = useState(1);
+  const { slug } = useParams(); const [p, setP] = useState(undefined), [revs, setRevs] = useState([]), [q, setQ] = useState(1), [hero,setHero]=useState(null);
   const { add, toggleWish, wish } = useStore(); const nav = useNavigate();
   useSeo(p?.name || 'Product', p?.description, p && { '@context': 'https://schema.org', '@type': 'Product', name: p.name, description: p.description, image: p.image ? [new URL(img(p.image), location.origin).href] : undefined, offers: { '@type': 'Offer', priceCurrency: 'INR', price: p.price, availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' }, ...(p.reviewCount > 0 && { aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviewCount } }) });
-  useSync(() => { api('/products/' + slug).then((x) => { setP(x); api(`/products/${x._id}/reviews`).then(setRevs).catch(() => {}); }).catch(() => setP(null)); }, [slug]);
+  useSync(() => { api('/products/' + slug).then((x) => { setP(x); setHero(x.image); api(`/products/${x._id}/reviews`).then(setRevs).catch(() => {}); }).catch(() => setP(null)); }, [slug]);
   useEffect(() => { if (p && location.hash === '#customize') setTimeout(() => document.getElementById('customize')?.scrollIntoView(), 100); }, [p]);
   if (p === undefined) return <div className="skeleton h-80" />;
   if (!p) return <NotFound />;
   const liked = wish.includes(p._id);
   return (<>
     <div className="grid gap-6 md:grid-cols-2">
-      <div className="relative rounded-2xl border bg-white p-4"><Thumb p={p} cls="mx-auto aspect-square w-full max-w-sm rounded-xl" />
+      <div className="relative rounded-2xl border bg-white p-4"><Thumb p={{...p,image:hero||p.image}} cls="mx-auto aspect-square w-full max-w-sm rounded-xl" />{(p.images||[]).length>1&&<div className="mt-3 flex gap-2 overflow-x-auto">{p.images.map((src,i)=><button type="button" key={src} aria-label={`View product image ${i+1}`} onClick={()=>setHero(src)} className={'shrink-0 rounded-lg border-2 '+((hero||p.image)===src?'border-brand':'border-transparent')}><img src={img(src)} alt="" className="h-14 w-14 rounded object-cover"/></button>)}</div>}
         <button aria-label={liked ? 'Remove from wishlist' : 'Add to wishlist'} aria-pressed={liked} onClick={() => toggleWish(p._id)} className={'absolute right-4 top-4 ' + (liked ? 'text-brand' : 'text-neutral-400')}><Icon n="heart" className="h-6 w-6" fill={liked} /></button></div>
       <div><span className="text-sm text-neutral-500">{p.category?.name}</span><h1 className="text-3xl font-extrabold">{p.name}</h1>
         {p.reviewCount > 0 && <p className="text-sm">{p.rating?.toFixed(1)} from {p.reviewCount} verified purchase review{p.reviewCount === 1 ? '' : 's'}</p>}
@@ -76,5 +77,6 @@ export default function Product() {
     {p.customizable && <Customize p={p} />}
     <h2 className="mb-2 mt-8 text-xl font-extrabold">Reviews</h2>
     {revs.length === 0 ? <p className="text-sm text-neutral-500">No reviews yet. Customers can review a product after it is delivered.</p> : revs.map((r) => <div key={r._id} className="mb-2 rounded-xl border bg-white p-3 text-sm"><b>{r.name}</b> <span className="text-neutral-600">Rating: {r.rating} out of 5</span><p className="text-neutral-700">{r.comment}</p></div>)}
+    <ProductRecommendations productId={p._id}/>
   </>);
 }

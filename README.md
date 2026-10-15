@@ -7,10 +7,13 @@ This project is built with the **MERN stack**: MongoDB, Express, React, and Node
 ## What I’m building
 
 - A responsive storefront with product search, categories, product details, a cart, and wishlist.
+- Product detail pages with category, price, and keyword based recommendations.
 - Customer accounts, Google sign-in support, saved addresses, order history, and notifications.
 - Checkout with delivery scheduling, coupons, cash on delivery, and optional Razorpay online payments.
 - Custom cake requests with size, flavor, shape, toppings, message, delivery details, and an optional reference photo.
 - An admin area for managing products, inventory, orders, custom cake requests, and customer conversations.
+- Per-account notification preferences for customers and admins, including event types, email, sound choice, volume, and optional custom sounds.
+- Admin product image capture and multi-image uploads with previews, main-image selection, validation, and upload progress.
 - Live customer and admin chat using Socket.IO.
 - An AI-ready direction for future features such as product discovery, shopping assistance, and operational insights.
 

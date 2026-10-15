@@ -8,6 +8,20 @@ r.use(auth, adminOnly);
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 5);
 const bool = z.preprocess((v) => v === true || v === 'true', z.boolean());
 
+const aiRequestSchema = z.object({ description: z.string().trim().min(5, 'Describe the product in a little more detail.').max(500, 'Product description must be 500 characters or fewer.') });
+const aiProductSchema = z.object({
+  name: z.string().trim().min(2).max(80), description: z.string().trim().min(2).max(1000),
+  category: z.string().trim().min(1).max(80), price: z.number().finite().min(0).max(10000000),
+  compareAtPrice: z.number().finite().min(0).max(10000000).nullable(), tags: z.array(z.string().trim().min(1).max(30)).max(12),
+  condition: z.string().trim().min(1).max(40), brand: z.string().trim().max(60), stock: z.number().int().min(0).max(1000000),
+});
+function parseAiJson(content) {
+  const clean = String(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = clean.indexOf('{'), end = clean.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('Invalid AI response');
+  return JSON.parse(clean.slice(start, end + 1));
+}
+
 // ---------- dashboard ----------
 r.get('/dashboard', wrap(async (req, res) => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -41,8 +55,8 @@ r.patch('/orders/:id/status', validate(z.object({ status: z.enum(Object.keys(TEX
   if (['CANCELLED', 'REJECTED'].includes(s)) await restoreStock(o);
   if (s === 'DELIVERED' && o.payment.method === 'COD') o.payment.status = 'PAID';
   logStatus(o, s); await o.save(); await audit(req, `Order ${o.code} → ${s}`, o._id);
-  const type = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' ? 'ORDER_REJECTED' : 'ORDER_STATUS';
-  await notify(o.user, type, `Order ${s.replace(/_/g, ' ').toLowerCase()}`, `Your Shivam Store order #${o.code} ${TEXT[s]}.${req.body.reason ? ' Reason: ' + req.body.reason : ''}`, { orderId: o._id });
+  const type = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' ? 'ORDER_REJECTED' : s === 'CANCELLED' ? 'ORDER_CANCELLED' : 'ORDER_STATUS';
+  await notify(o.user, type, '', '', { template:true, orderNumber:o.code, status:TEXT[s], orderId:o._id, ...(req.body.reason&&{reason:req.body.reason}) });
   emitUser(o.user, 'order:updated', o); emitAdmin('order:updated', o); ok(res, o);
 }));
 
@@ -52,39 +66,61 @@ r.post('/custom-orders/:id/accept', validate(z.object({ finalPrice: z.number().m
   const cr = await CustomRequest.findById(req.params.id);
   if (!cr || cr.status !== 'PENDING') throw new AppError('This request is no longer pending.', 'BAD_STATE');
   cr.status = 'ACCEPTED'; cr.finalPrice = Math.round(req.body.finalPrice); await cr.save(); await audit(req, `Accepted custom ${cr.code} at ₹${cr.finalPrice}`, cr._id);
-  await notify(cr.user, 'CUSTOM_ACCEPTED', 'Your custom cake request has been accepted.', `Final price: ₹${cr.finalPrice}. Delivery: ${cr.deliveryTime}. Open My Orders to confirm and pay.`, { requestId: cr._id });
+  await notify(cr.user, 'CUSTOM_ACCEPTED', '', '', { template:true, requestId: cr._id });
   emitUser(cr.user, 'custom-order:updated', cr); emitAdmin('custom-order:updated', cr); ok(res, cr);
 }));
 r.post('/custom-orders/:id/reject', validate(z.object({ reason: z.string().min(3).max(300) })), wrap(async (req, res) => {
   const cr = await CustomRequest.findById(req.params.id);
   if (!cr || cr.status !== 'PENDING') throw new AppError('This request is no longer pending.', 'BAD_STATE');
   cr.status = 'REJECTED'; cr.rejectReason = req.body.reason; await cr.save(); await audit(req, `Rejected custom ${cr.code}`, cr._id);
-  await notify(cr.user, 'CUSTOM_REJECTED', 'Custom cake request declined', `Sorry: ${req.body.reason}`, { requestId: cr._id });
+  await notify(cr.user, 'CUSTOM_REJECTED', '', '', { template:true, requestId: cr._id });
   emitUser(cr.user, 'custom-order:updated', cr); emitAdmin('custom-order:updated', cr); ok(res, cr);
 }));
 
 // ---------- products & categories ----------
+ r.post('/products/ai-generate', validate(aiRequestSchema), wrap(async (req,res) => {
+  const apiKey=process.env.OPENAI_API_KEY;
+  if(!apiKey) throw new AppError('AI product generation is not configured on this server.','AI_NOT_CONFIGURED',503);
+  const categories=await Category.find({active:true}).select('name').sort('order').lean();
+  if(!categories.length) throw new AppError('Add a product category before generating product details.','NO_CATEGORIES',422);
+  try {
+    const response=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.AI_MODEL||'gpt-4o-mini',temperature:0.2,response_format:{type:'json_object'},messages:[
+      {role:'system',content:`Create accurate, concise e-commerce product listing details from the user's description. Return only a JSON object with keys name, description, category, price, compareAtPrice, tags, condition, brand, stock. category must exactly match one of these existing categories: ${categories.map(c=>c.name).join(', ')}. Use a reasonable market price in INR only when the description supports estimating it; otherwise price 0. compareAtPrice must be a number or null. stock should default to 1 for used/pre-owned items and 0 when unspecified for other products. Never claim unprovided specifications, condition, warranty, or authenticity. condition should be a short value such as New, Used, or Unspecified; brand can be an empty string when unknown. tags must be an array of short strings.`},
+      {role:'user',content:req.body.description}
+    ]})});
+    if(!response.ok) throw new Error('AI provider request failed');
+    const body=await response.json(), content=body?.choices?.[0]?.message?.content;
+    const parsed=aiProductSchema.safeParse(parseAiJson(content));
+    if(!parsed.success) throw new Error('AI response did not match product fields');
+    const category=categories.find(c=>c.name.toLowerCase()===parsed.data.category.toLowerCase());
+    if(!category) throw new Error('AI returned an unknown category');
+    ok(res,{...parsed.data,category:category.name});
+  } catch {
+    throw new AppError('Unable to generate product details. Please try again.','AI_GENERATION_FAILED',502);
+  }
+}));
 const prodSchema = z.object({
-  name: z.string().min(2).max(80), description: z.string().max(1000).optional(), category: z.string(), emoji: z.string().max(8).optional(),
+  name: z.string().min(2).max(80), description: z.string().max(1000).optional(), category: z.string(), emoji: z.string().max(8).optional(), brand: z.string().max(60).optional(), condition: z.string().max(40).optional(),
   price: z.coerce.number().min(0), comparePrice: z.coerce.number().min(0).optional().or(z.literal('').transform(() => undefined)),
   stock: z.coerce.number().int().min(0), unit: z.string().max(20).default('pc'),
   featured: bool, popular: bool, customizable: bool, eggless: bool, active: bool.default(true),
-  tags: z.preprocess((v) => (typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : v || []), z.array(z.string())),
+  tags: z.preprocess((v) => (typeof v === 'string' ? v.split(',').map((s) => s.trim()).filter(Boolean) : v || []), z.array(z.string())), mainImageIndex: z.coerce.number().int().min(0).optional(),
 });
 r.get('/products', wrap(async (req, res) => ok(res, await Product.find().populate('category', 'name').sort('-createdAt').limit(200))));
-r.post('/products', upload.single('image'), validate(prodSchema), wrap(async (req, res) => {
-  const p = await Product.create({ ...req.body, slug: slug(req.body.name), image: await storeFile(req.file) });
+r.post('/products', upload.fields([{name:'images',maxCount:8},{name:'image',maxCount:1}]), validate(prodSchema), wrap(async (req, res) => {
+  const files=[...(req.files?.images||[]),...(req.files?.image||[])]; if(files.length>8) throw new AppError('Upload up to 8 product images.','INVALID_FILE',422);
+  const images=(await Promise.all(files.map(storeFile))).filter(Boolean); const main=images[req.body.mainImageIndex||0]||images[0];
+  const p = await Product.create({ ...req.body, slug: slug(req.body.name), image: main, images });
   await audit(req, `Added product ${p.name}`, p._id);
   // Notify every active customer in real time (and keep it in their notification history).
   const customers = await User.find({ role: 'CUSTOMER', active: true, verified: true }).select('_id');
-  const docs = await Notification.insertMany(customers.map((c) => ({ user: c._id, type: 'PROMOTION', title: 'New at Shivam Store', message: `${p.name} is now available for ₹${p.price}.`, data: { slug: p.slug } })));
-  docs.forEach((n) => emitUser(n.user, 'notification:new', n));
+  for(const c of customers) await notify(c._id,'NEW_PRODUCT','New at Shivam Store',`${p.name} is now available for ₹${p.price}.`,{slug:p.slug});
   emitAdmin('inventory:updated', { id: p._id, stock: p.stock });
   ok(res, p, 'Product added.', 201);
 }));
-r.put('/products/:id', upload.single('image'), validate(prodSchema.partial()), wrap(async (req, res) => {
+r.put('/products/:id', upload.fields([{name:'images',maxCount:8},{name:'image',maxCount:1}]), validate(prodSchema.partial()), wrap(async (req, res) => {
   const p = await Product.findById(req.params.id); if (!p) throw new AppError('Product not found.', 'NOT_FOUND', 404);
-  Object.assign(p, req.body); if (req.file) p.image = await storeFile(req.file); await p.save();
+  const files=[...(req.files?.images||[]),...(req.files?.image||[])]; Object.assign(p, req.body); if(files.length){p.images=await Promise.all(files.map(storeFile));p.image=p.images[req.body.mainImageIndex||0]||p.images[0];} await p.save();
   await audit(req, `Edited product ${p.name} (₹${p.price}, stock ${p.stock})`, p._id); emitAdmin('inventory:updated', { id: p._id, stock: p.stock }); ok(res, p);
 }));
 r.delete('/products/:id', wrap(async (req, res) => {

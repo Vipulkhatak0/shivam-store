@@ -14,6 +14,7 @@ import shopRoutes from './shopRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import adminExtra from './adminExtra.js';
 import extraRoutes from './extraRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
 import { Product } from './models.js';
 
 for (const k of ['MONGODB_URI', 'JWT_SECRET']) if (!process.env[k]) { console.error(`Missing ${k}. Copy server/.env.example to server/.env and fill it in.`); process.exit(1); }
@@ -42,6 +43,7 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60e3, limit: 100, standardHeaders: true, legacyHeaders: false }));
 app.get('/api/health', (q, r) => r.json({ success: true, message: 'ok', data: {} }));
 app.use('/api/auth', authRoutes);
+app.use('/api', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin', adminExtra);
 app.use('/api', extraRoutes);

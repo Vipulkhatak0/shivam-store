@@ -22,15 +22,18 @@ export const Category = model('Category', new Schema({
   order: { type: Number, default: 0 }, active: { type: Boolean, default: true },
 }));
 
-export const Product = model('Product', new Schema({
+const productS = new Schema({
   name: { type: String, required: true }, slug: { type: String, unique: true }, description: String,
-  category: id('Category'), image: String, emoji: String,
+  category: id('Category'), image: String, images: [String], emoji: String, brand: String, condition: String,
   price: { type: Number, min: 0, required: true }, comparePrice: { type: Number, min: 0 },
   stock: { type: Number, min: 0, default: 0 }, unit: { type: String, default: 'pc' },
   active: { type: Boolean, default: true }, featured: Boolean, popular: Boolean,
   customizable: Boolean, eggless: Boolean, tags: [String],
   rating: { type: Number, default: 0 }, reviewCount: { type: Number, default: 0 },
-}, T));
+}, T);
+productS.index({ active: 1, category: 1, stock: 1, price: 1 });
+productS.index({ active: 1, popular: -1, featured: -1 });
+export const Product = model('Product', productS);
 
 const addr = { name: String, phone: String, line1: String, area: String, city: String, pincode: String, landmark: String };
 export const Order = model('Order', new Schema({
@@ -55,6 +58,8 @@ export const CustomRequest = model('CustomRequest', new Schema({
 export const Notification = model('Notification', new Schema({
   user: id('User'), type: String, title: String, message: String, data: Object, read: { type: Boolean, default: false },
 }, T));
+const prefS = new Schema({ user: { ...id('User'), unique: true, index: true }, push: { enabled: { type: Boolean, default: true } }, sound: { enabled: { type: Boolean, default: true }, soundId: { type: String, default: 'universfield' }, volume: { type: Number, min: 0, max: 1, default: 0.7 } }, notifications: { type: Schema.Types.Mixed, default: {} }, email: { type: Schema.Types.Mixed, default: {} } }, T);
+export const NotificationPreference = model('NotificationPreference', prefS);
 export const Message = model('Message', new Schema({
   customer: id('User'), senderRole: String, sender: id('User'), text: String, attachments: [String], read: { type: Boolean, default: false },
 }, T));

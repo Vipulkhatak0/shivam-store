@@ -68,8 +68,8 @@ function Footer() {
   return <footer className="border-t bg-neutral-50 px-4 py-6 text-sm text-neutral-700"><div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><span>Shivam Store</span><nav aria-label="Policies" className="flex gap-5"><Link to="/privacy">Privacy Policy</Link><Link to="/terms">Terms and Conditions</Link></nav></div></footer>;
 }
 function Toasts() {
-  const t = useStore((s) => s.toasts);
-  return <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto flex w-[92%] max-w-md flex-col gap-2 md:bottom-6" aria-live="polite">{t.map((x) => <div key={x.id} className="rounded-xl bg-cocoa px-4 py-3 text-sm text-white shadow-lg">{x.m}</div>)}</div>;
+  const t = useStore((s) => s.toasts), dismiss=useStore((s)=>s.dismissToast);
+  return <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto flex w-[92%] max-w-md flex-col gap-2 md:bottom-6" aria-live="polite">{t.map((x) => <div key={x.id} role="status" onClick={()=>dismiss(x.id)} className="pointer-events-auto flex cursor-pointer items-start justify-between gap-3 rounded-xl bg-cocoa px-4 py-3 text-sm text-white shadow-lg">{x.m}<button type="button" aria-label="Dismiss notification" onClick={(e)=>{e.stopPropagation();dismiss(x.id);}} className="shrink-0 font-bold">×</button></div>)}</div>;
 }
 export default function App() {
   const boot = useStore((s) => s.boot), ready = useStore((s) => s.ready), refreshUser = useStore((s) => s.refreshUser);

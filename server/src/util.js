@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
-import { User, Notification, AuditLog } from './models.js';
+import { User, Notification, AuditLog, NotificationPreference } from './models.js';
+import { defaultsFor, TYPES } from './notificationDefaults.js';
+import { notificationTemplate } from './notifications.js';
 
 export class AppError extends Error {
   constructor(message, errorCode = 'BAD_REQUEST', status = 400) { super(message); this.errorCode = errorCode; this.status = status; }
@@ -31,9 +33,14 @@ export const validate = (schema) => (req, res, next) => {
 
 let io; export const setIO = (i) => { io = i; };
 export async function notify(userId, type, title, message, data = {}) {
+  const user = await User.findById(userId).select('role active'); if (!user?.active) return null;
+  const pref = await NotificationPreference.findOne({ user: userId }).lean();
+  const defaults = defaultsFor(user.role), enabled = pref?.notifications?.[type] ?? defaults.notifications[type] ?? true;
+  if (!enabled) return null;
+  if (data?.template) [title, message] = notificationTemplate(user.role, type, data);
   const n = await Notification.create({ user: userId, type, title, message, data });
   io.to(`user:${userId}`).emit('notification:new', n);
-  if (EMAIL_TYPES.has(type)) emailUser(userId, title, message).catch((e) => console.error('Email failed:', e.message));
+  if (EMAIL_TYPES.has(type)) emailUser(userId, type, title, message).catch((e) => console.error('Email failed:', e.message));
   return n;
 }
 export async function notifyAdmins(type, title, message, data = {}, event, payload) {
@@ -46,11 +53,11 @@ export const emitAdmin = (ev, payload) => io.to('admin').emit(ev, payload);
 export const audit = (req, action, target) => AuditLog.create({ admin: req.user._id, action, target: String(target) });
 
 export const mailHtml = (title, body) => `<div style="font-family:Arial,sans-serif;background:#FFF8F2;padding:24px"><div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;overflow:hidden"><div style="background:#F44336;color:#fff;padding:16px 24px;font-size:20px;font-weight:bold">Shivam Store</div><div style="padding:24px"><h2 style="margin:0 0 12px;color:#171717">${title}</h2><p style="color:#333;font-size:15px;line-height:1.5">${body}</p></div><div style="padding:12px 24px;background:#fafafa;color:#888;font-size:12px">Fresh Cakes • Snacks • Everyday Essentials</div></div></div>`;
-const EMAIL_TYPES = new Set(['ORDER_PLACED', 'PAYMENT_SUCCESS', 'ORDER_ACCEPTED', 'ORDER_REJECTED', 'ORDER_STATUS', 'CUSTOM_ACCEPTED', 'CUSTOM_REJECTED']);
-async function emailUser(uid, title, message) {
+const EMAIL_TYPES = new Set(['ORDER_PLACED','PAYMENT_SUCCESS','ORDER_ACCEPTED','ORDER_REJECTED','ORDER_STATUS','ORDER_CANCELLED','PAYMENT_FAILED','CUSTOM_ORDER','CUSTOM_REQUEST','CUSTOM_ACCEPTED','CUSTOM_REJECTED','NEW_CUSTOMER','NEW_MESSAGE','PROMOTIONS','NEW_PRODUCT']);
+async function emailUser(uid, type, title, message) {
   if (!process.env.SMTP_HOST) return;
   const u = await User.findById(uid).select('email role');
-  if (u?.role === 'CUSTOMER') await sendMail(u.email, title, message, mailHtml(title, message));
+  if (u) { const p = await NotificationPreference.findOne({ user: uid }).lean(), d=defaultsFor(u.role); if(p?.email?.enabled===false || (p?.email?.[type] ?? d.email[type])===false) return; await sendMail(u.email, title, message, mailHtml(title, message)); }
 }
 export async function sendMail(to, subject, text, html) {
   if (!process.env.SMTP_HOST) {

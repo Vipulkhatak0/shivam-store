@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { User } from './models.js';
 import { OAuth2Client } from 'google-auth-library';
-import { ok, AppError, wrap, auth, validate, sign, sendMail, mailHtml } from './util.js';
+import { ok, AppError, wrap, auth, validate, sign, sendMail, mailHtml, notifyAdmins } from './util.js';
 const r = Router();
 
 async function issueOtp(u) {
@@ -40,6 +40,7 @@ r.post('/verify-otp', validate(z.object({ email, otp: z.string().length(6) })), 
   u.otpTries += 1;
   if (!(await bcrypt.compare(req.body.otp, u.otp))) { await u.save(); throw new AppError('Incorrect code.', 'OTP_INVALID'); }
   u.verified = true; u.otp = undefined; u.otpExpires = undefined; await u.save();
+  await notifyAdmins('NEW_CUSTOMER','','',{template:true,customerName:u.name});
   ok(res, {}, 'Email verified. You can log in now.');
 }));
 

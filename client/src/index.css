@@ -4,4 +4,6 @@ body { @apply bg-white text-[#171717] antialiased; }
 .skeleton { @apply animate-pulse rounded-lg bg-neutral-200; }
 .hero-img { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%); mask-image: linear-gradient(to right, transparent 0, #000 22%); }
 .noscroll::-webkit-scrollbar { display: none; }
+.recommendation-row { grid-auto-columns: calc((100% - 0.75rem) / 2); }
+@media (min-width: 768px) { .recommendation-row { grid-auto-columns: calc((100% - 2.25rem) / 4); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

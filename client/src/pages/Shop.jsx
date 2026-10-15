@@ -14,6 +14,7 @@ export function ProductCard({ p }) {
       <Link to={`/product/${p.slug}`} className="block"><Thumb p={p} cls="mx-auto h-28 w-full rounded-lg" /></Link>
       <Link to={`/product/${p.slug}`} className="mt-2 text-sm font-bold leading-snug hover:text-brand">{p.name}</Link>
       <div className="flex items-baseline gap-1.5"><b className="text-[15px]">{money(p.price)}</b>{pct > 0 && <s className="text-xs text-neutral-400">{money(p.comparePrice)}</s>}</div>
+      {(pct > 0 || p.reviewCount > 0) && <div className="mt-1 flex items-center justify-between text-[11px]">{pct>0?<span className="font-bold text-green-700">{pct}% off</span>:<span/>}{p.reviewCount>0&&<span className="text-amber-700">★ {Number(p.rating||0).toFixed(1)}</span>}</div>}
       <div className="mt-2 flex justify-center"><Qty v={q} set={setQ} max={Math.max(1, p.stock)} /></div>
       <button className={btn + ' mt-2 w-full text-sm'} disabled={off} onClick={() => { add(p, q); setQ(1); }}>{off ? 'Out of Stock' : <><Icon n="cart" className="h-4 w-4" />Add to Cart</>}</button>
       {p.customizable && !off && <Link to={`/product/${p.slug}#customize`} className="mt-1.5 text-center text-xs font-bold text-brand hover:underline">Customize Cake</Link>}
@@ -29,7 +30,7 @@ export function Home() {
     <section className="relative hidden h-[258px] overflow-hidden rounded-lg bg-peach md:block">
       <img src="/img/hero.png" alt="Shivam Store mascot holding a chocolate cake and giving a thumbs up" className="hero-img absolute right-0 top-0 h-full w-auto max-w-[68%] object-cover object-right" />
       <div className="relative z-10 px-10 pt-9"><h1 className="text-[42px] font-extrabold leading-tight text-cocoa">Cakes, snacks<br />and daily groceries</h1>
-        <p className="mt-3 max-w-xs text-[17px] leading-snug text-cocoa/80">Browse the Shivam Store range and place an order for local delivery.</p></div>
+        <p className="mt-3 max-w-xs text-[17px] leading-snug text-cocoa/80">Everyday essentials</p></div>
       <Link to="/shop" className={btn + ' absolute bottom-6 left-10 z-10 !px-7 !py-2.5 text-lg'}>Browse products <Icon n="arrow" /></Link>
     </section>
     {top.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2 md:hidden">{top.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="text-center"><div className="flex h-16 items-center justify-center rounded-xl border bg-white p-1"><img src={img(c.image)} alt="" className="max-h-full object-contain" /></div><span className="text-xs font-semibold">{c.name}</span></Link>)}</div>}

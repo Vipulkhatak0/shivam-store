@@ -16,6 +16,9 @@ export const upload = multer({
 });
 export async function storeFile(f) {
   if (!f) return undefined;
+  const bytes=fs.readFileSync(f.path), ext=path.extname(f.originalname).toLowerCase();
+  const valid=(ext==='.png'&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))||(['.jpg','.jpeg'].includes(ext)&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255)||(ext==='.webp'&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
+  if(!valid){fs.unlink(f.path,()=>{});throw new AppError('Unsupported image format.','INVALID_FILE',422);}
   const { CLOUDINARY_CLOUD_NAME: c, CLOUDINARY_API_KEY: k, CLOUDINARY_API_SECRET: s } = process.env;
   if (c && k && s) {
     cloudinary.config({ cloud_name: c, api_key: k, api_secret: s });
@@ -55,6 +58,22 @@ r.get('/products', wrap(async (req, res) => {
     Product.find(f).populate('category', 'name slug').sort(S[sort] || S.popular).skip((page - 1) * limit).limit(limit),
     Product.countDocuments(f)]);
   ok(res, { items, total, page, pages: Math.ceil(total / limit) });
+}));
+r.get('/products/:id/recommendations', wrap(async (req,res)=>{
+  const id=String(req.params.id);
+  if(!/^[a-f\d]{24}$/i.test(id)) throw new AppError('Invalid product ID.','VALIDATION_ERROR',422);
+  const current=await Product.findOne({_id:id,active:true}).select('category price tags name').lean();
+  if(!current) throw new AppError('Product not found.','NOT_FOUND',404);
+  const imageFilter={name:{$type:'string',$ne:''},price:{$type:'number',$gte:0},stock:{$gt:0},$or:[{image:{$type:'string',$ne:''}},{images:{$elemMatch:{$type:'string',$ne:''}}}]};
+  const fields='_id name slug price comparePrice image images emoji stock rating reviewCount customizable category tags popular featured';
+  const same=current.category?await Product.find({...imageFilter,active:true,category:current.category,_id:{$ne:current._id}}).select(fields).limit(48).lean():[];
+  const terms=new Set([...(current.tags||[]),...(current.name||'').toLowerCase().split(/[^a-z0-9]+/)].map(x=>String(x).toLowerCase().trim()).filter(x=>x.length>2));
+  const keywordScore=(p)=>{const cand=new Set([...(p.tags||[]),...(p.name||'').toLowerCase().split(/[^a-z0-9]+/)].map(x=>String(x).toLowerCase().trim()));let n=0;for(const t of terms)if(cand.has(t))n++;return n;};
+  const priceGap=(p)=>Math.abs(Number(p.price)-Number(current.price))/Math.max(1,Number(current.price));
+  same.sort((a,b)=>priceGap(a)-priceGap(b)||keywordScore(b)-keywordScore(a)||Number(b.popular||b.featured)-Number(a.popular||a.featured));
+  const out=same.slice(0,6), seen=new Set([id,...out.map(p=>String(p._id))]);
+  if(out.length<6){const fallback=await Product.find({...imageFilter,active:true,_id:{$nin:[...seen]}}).select(fields).sort({popular:-1,featured:-1,reviewCount:-1,rating:-1}).limit(18).lean();for(const p of fallback){const key=String(p._id);if(!seen.has(key)){seen.add(key);out.push(p);if(out.length===6)break;}}}
+  ok(res,{items:out});
 }));
 r.get('/products/:slug', wrap(async (req, res) => {
   const p = await Product.findOne({ slug: req.params.slug, active: true }).populate('category', 'name slug');
@@ -112,8 +131,10 @@ async function announce(order, paid) {
     const cr = await CustomRequest.findById(order.customRequest);
     if (cr && (paid || order.payment.method === 'COD')) { cr.status = 'PAID'; await cr.save(); emitAdmin('custom-order:updated', cr); }
   }
-  await notifyAdmins('ORDER_PLACED', 'New Order', `New order #${order.code} (₹${order.total}) from ${order.address.name}.`, { orderId: order._id }, 'order:created', order);
-  await notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', paid ? 'Payment successful' : 'Order placed', `Your Shivam Store order #${order.code} has been placed.`, { orderId: order._id });
+  const customer=await User.findById(order.user).select('name');
+  await notifyAdmins('ORDER_PLACED', '', '', { template:true, orderNumber:order.code, customerName:customer?.name, total:order.total, orderId: order._id }, 'order:created', order);
+  if(paid) await notifyAdmins('PAYMENT_SUCCESS','','',{template:true,orderNumber:order.code,customerName:customer?.name,total:order.total,orderId:order._id});
+  await notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', '', '', { template:true, orderNumber:order.code, total:order.total, orderId: order._id });
 }
 async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupon, total, address, deliveryDate, deliverySlot, note, method, customRequest }) {
   const taken = [];
@@ -179,7 +200,7 @@ r.post('/orders/:id/cancel', auth, wrap(async (req, res) => {
   if (!o) throw new AppError('Order not found.', 'NOT_FOUND', 404);
   if (!['PENDING', 'CONFIRMED'].includes(o.status)) throw new AppError('This order can no longer be cancelled.', 'NOT_CANCELLABLE');
   await restoreStock(o); log(o, 'CANCELLED'); await o.save();
-  await notifyAdmins('ORDER_STATUS', 'Order cancelled', `#${o.code} was cancelled by the customer.`, { orderId: o._id }, 'order:updated', o); ok(res, o, 'Order cancelled.');
+  await notifyAdmins('ORDER_CANCELLED', '', '', { template:true, orderNumber:o.code, orderId: o._id }, 'order:updated', o); ok(res, o);
 }));
 
 // ---------- custom cakes ----------
@@ -216,9 +237,8 @@ r.post('/custom-orders', auth, upload.single('photo'), validate(customSchema), w
     deliveryDate: b.deliveryDate, deliveryTime: b.deliveryTime, address: b.address, estimatedPrice: estimate(p, b),
   });
   const payload = { ...cr.toObject(), customer: { _id: req.user._id, name: req.user.name } };
-  await notifyAdmins('CUSTOM_REQUEST', 'New Custom Cake Request',
-    `${req.user.name}: ${b.kg} KG ${p.name}${b.eggless ? ' (eggless)' : ''}, “${b.message}”, ${b.deliveryTime} on ${b.deliveryDate}. Estimated ₹${cr.estimatedPrice}.`, { requestId: cr._id }, 'custom-order:new', payload);
-  await notify(req.user._id, 'CUSTOM_REQUEST', 'Request sent', 'The bakery will review your custom cake request shortly.', { requestId: cr._id });
+  await notifyAdmins('CUSTOM_REQUEST', '', '', { template:true, customerName:req.user.name, requestId: cr._id }, 'custom-order:new', payload);
+  await notify(req.user._id, 'CUSTOM_REQUEST', '', '', { template:true, requestId: cr._id });
   ok(res, cr, 'Custom cake request sent.', 201);
 }));
 r.get('/custom-orders', auth, wrap(async (req, res) => ok(res, await CustomRequest.find({ user: req.user._id }).sort('-createdAt'))));
