@@ -50,7 +50,7 @@ r.get('/products', wrap(async (req, res) => {
   if (customizable === 'true') f.customizable = true;
   if (featured === 'true') f.featured = true;
   if (minPrice || maxPrice) f.price = { ...(minPrice && { $gte: +minPrice }), ...(maxPrice && { $lte: +maxPrice }) };
-  const S = { popular: { popular: -1, reviewCount: -1 }, low: { price: 1 }, high: { price: -1 }, new: { createdAt: -1 }, rating: { rating: -1 } };
+  const S = { popular: { popular: -1, reviewCount: -1 }, low: { price: 1 }, high: { price: -1 }, new: { createdAt: -1 }, rating: { reviewCount: -1, rating: -1 } };
   const [items, total] = await Promise.all([
     Product.find(f).populate('category', 'name slug').sort(S[sort] || S.popular).skip((page - 1) * limit).limit(limit),
     Product.countDocuments(f)]);
@@ -112,7 +112,7 @@ async function announce(order, paid) {
     const cr = await CustomRequest.findById(order.customRequest);
     if (cr && (paid || order.payment.method === 'COD')) { cr.status = 'PAID'; await cr.save(); emitAdmin('custom-order:updated', cr); }
   }
-  await notifyAdmins('ORDER_PLACED', '🔔 New Order', `New order #${order.code} (₹${order.total}) from ${order.address.name}.`, { orderId: order._id }, 'order:created', order);
+  await notifyAdmins('ORDER_PLACED', 'New Order', `New order #${order.code} (₹${order.total}) from ${order.address.name}.`, { orderId: order._id }, 'order:created', order);
   await notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', paid ? 'Payment successful' : 'Order placed', `Your Shivam Store order #${order.code} has been placed.`, { orderId: order._id });
 }
 async function createOrder({ user, lines, subtotal, deliveryFee, discount, coupon, total, address, deliveryDate, deliverySlot, note, method, customRequest }) {
@@ -216,7 +216,7 @@ r.post('/custom-orders', auth, upload.single('photo'), validate(customSchema), w
     deliveryDate: b.deliveryDate, deliveryTime: b.deliveryTime, address: b.address, estimatedPrice: estimate(p, b),
   });
   const payload = { ...cr.toObject(), customer: { _id: req.user._id, name: req.user.name } };
-  await notifyAdmins('CUSTOM_REQUEST', '🔔 New Custom Cake Request',
+  await notifyAdmins('CUSTOM_REQUEST', 'New Custom Cake Request',
     `${req.user.name}: ${b.kg} KG ${p.name}${b.eggless ? ' (eggless)' : ''}, “${b.message}”, ${b.deliveryTime} on ${b.deliveryDate}. Estimated ₹${cr.estimatedPrice}.`, { requestId: cr._id }, 'custom-order:new', payload);
   await notify(req.user._id, 'CUSTOM_REQUEST', 'Request sent', 'The bakery will review your custom cake request shortly.', { requestId: cr._id });
   ok(res, cr, 'Custom cake request sent.', 201);
@@ -253,7 +253,7 @@ r.post('/chat', auth, upload.single('file'), validate(z.object({ text: z.string(
   if (!text && !att.length) throw new AppError('Write a message or attach a photo.', 'VALIDATION_ERROR', 422);
   const m = await Message.create({ customer: req.user._id, sender: req.user._id, senderRole: 'CUSTOMER', text, attachments: att });
   emitAdmin('chat:message', { ...m.toObject(), customerName: req.user.name });
-  await notifyAdmins('NEW_MESSAGE', 'New message', `${req.user.name}: ${(text || '📷 Photo').slice(0, 80)}`, { customerId: req.user._id });
+  await notifyAdmins('NEW_MESSAGE', 'New message', `${req.user.name}: ${(text || 'Photo attachment').slice(0, 80)}`, { customerId: req.user._id });
   ok(res, m, 'Message sent.', 201);
 }));
 export { emitUser };

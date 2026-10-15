@@ -46,6 +46,6 @@ export default function Account() {
   const { tab = 'profile' } = useParams(); const user = useStore((s) => s.user);
   if (!user) return <Navigate to="/login" />;
   return <div><h1 className="mb-3 text-2xl font-extrabold">My Account</h1>
-    <div className="noscroll mb-4 flex gap-2 overflow-x-auto">{TABS.map(([k, l]) => <Link key={k} to={`/account/${k}`} className={'whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-semibold ' + (tab === k ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{l}</Link>)}</div>
+    <div className="noscroll mb-4 flex gap-2 overflow-x-auto">{TABS.map(([k, l]) => <Link key={k} to={`/account/${k}`} className={'whitespace-nowrap rounded-md border px-4 py-1.5 text-sm font-semibold ' + (tab === k ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{l}</Link>)}</div>
     {tab === 'wishlist' ? <Wishlist /> : tab === 'addresses' ? <Addresses /> : tab === 'notifications' ? <Notes /> : <Profile />}</div>;
 }

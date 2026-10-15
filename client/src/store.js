@@ -27,6 +27,10 @@ export const useStore = create(persist((set, get) => ({
     if (localStorage.getItem('token')) { try { set({ user: (await api('/auth/me')).user }); get().afterLogin(); } catch { localStorage.removeItem('token'); } }
     set({ ready: true });
   },
+  async refreshUser() {
+    if (!localStorage.getItem('token')) return;
+    try { set({ user: (await api('/auth/me')).user }); } catch {}
+  },
   afterLogin() { get().connect(); get().loadNotes(); api('/wishlist/ids').then((d) => set({ wish: d.ids })).catch(() => {}); },
   setAuth(token, user) { localStorage.setItem('token', token); set({ user }); get().afterLogin(); },
   setUser: (user) => set({ user }),

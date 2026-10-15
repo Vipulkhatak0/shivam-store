@@ -26,18 +26,18 @@ export function Home() {
   useSync(() => { api('/categories').then(setCats).catch(() => setCats([])); api('/products?featured=true&limit=6').then((d) => setPop(d.items)).catch(() => setPop([])); api('/banner').then(setBan).catch(() => {}); }, []);
   const top = (cats || []).slice(0, 4), rest = (cats || []).slice(4);
   return (<>
-    <section className="relative hidden h-[258px] overflow-hidden rounded-2xl bg-gradient-to-r from-peach to-[#FFF6EE] md:block">
+    <section className="relative hidden h-[258px] overflow-hidden rounded-lg bg-peach md:block">
       <img src="/img/hero.png" alt="Shivam Store mascot holding a chocolate cake and giving a thumbs up" className="hero-img absolute right-0 top-0 h-full w-auto max-w-[68%] object-cover object-right" />
-      <div className="relative z-10 px-10 pt-9"><h1 className="text-[52px] font-extrabold leading-[1.05] text-cocoa">Fresh Food<br /><span className="text-brand">Happier Days!</span></h1>
-        <p className="mt-3 max-w-xs text-[17px] leading-snug text-cocoa/80">Delicious cakes, tasty snacks and everyday groceries, all at Shivam Store.</p></div>
-      <Link to="/shop" className={btn + ' absolute bottom-6 left-10 z-10 !rounded-full !px-7 !py-2.5 text-lg'}>Shop Now <Icon n="arrow" /></Link>
+      <div className="relative z-10 px-10 pt-9"><h1 className="text-[42px] font-extrabold leading-tight text-cocoa">Cakes, snacks<br />and daily groceries</h1>
+        <p className="mt-3 max-w-xs text-[17px] leading-snug text-cocoa/80">Browse the Shivam Store range and place an order for local delivery.</p></div>
+      <Link to="/shop" className={btn + ' absolute bottom-6 left-10 z-10 !px-7 !py-2.5 text-lg'}>Browse products <Icon n="arrow" /></Link>
     </section>
     {top.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2 md:hidden">{top.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="text-center"><div className="flex h-16 items-center justify-center rounded-xl border bg-white p-1"><img src={img(c.image)} alt="" className="max-h-full object-contain" /></div><span className="text-xs font-semibold">{c.name}</span></Link>)}</div>}
     {ban && <section className="mt-4 flex items-center justify-between overflow-hidden rounded-2xl bg-peach p-4 md:hidden"><div><h2 className="font-extrabold leading-tight text-brand">Today's Special</h2><p className="mt-1 font-semibold leading-tight text-cocoa">{ban.title}<br />{ban.subtitle}</p><Link to={ban.link || '/shop'} className={btn + ' mt-3 !px-4 !py-1.5 text-sm'}>{ban.cta}</Link></div><img src="/img/special.png" alt="" className="h-28 w-28 object-contain" /></section>}
     <div className="mt-4 hidden grid-cols-4 gap-4 md:grid">{!cats ? Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-[66px]" />) : top.map((c) => (
       <Link key={c._id} to={`/shop/${c.slug}`} className="flex items-center gap-4 rounded-xl border border-neutral-200 bg-[#F6F3F1] px-4 py-2 transition hover:border-brand"><img src={img(c.image)} alt="" className="h-12 w-16 object-contain mix-blend-multiply" /><b className="flex-1 text-lg">{c.name}</b><Icon n="chev" className="h-5 w-5 text-neutral-500" /></Link>))}</div>
-    {rest.length > 0 && <div className="noscroll mt-3 flex gap-2 overflow-x-auto">{rest.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="whitespace-nowrap rounded-full border bg-white px-3 py-1.5 text-sm font-semibold hover:border-brand">{c.emoji} {c.name} <span className="text-neutral-400">{c.productCount}</span></Link>)}</div>}
-    <SEC title="Popular Products" to="/shop">{!pop ? <Skel /> : pop.length === 0 ? <p className="text-neutral-500">No products yet. Run <code>npm run seed</code> on the server.</p> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">{pop.map((p) => <ProductCard key={p._id} p={p} />)}</div>}</SEC>
+    {rest.length > 0 && <div className="noscroll mt-3 flex gap-2 overflow-x-auto">{rest.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className="whitespace-nowrap rounded-md border bg-white px-3 py-1.5 text-sm font-semibold hover:border-brand">{c.name}</Link>)}</div>}
+    <SEC title="Popular Products" to="/shop">{!pop ? <Skel /> : pop.length === 0 ? <p className="text-neutral-500">No products yet</p> : <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">{pop.map((p) => <ProductCard key={p._id} p={p} />)}</div>}</SEC>
   </>);
 }
 export function Shop() {
@@ -56,8 +56,8 @@ export function Shop() {
   useSync(() => { api('/categories').then(setCats).catch(() => {}); }, []);
   return (<>
     <h1 className="text-2xl font-extrabold">{cur ? cur.name : q ? `Results for “${q}”` : 'All products'}</h1>
-    <div className="noscroll my-3 flex gap-2 overflow-x-auto"><Link to="/shop" className={'whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold ' + (!cat ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>All</Link>
-      {cats.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className={'whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold ' + (cat === c.slug ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{c.emoji} {c.name}</Link>)}</div>
+    <div className="noscroll my-3 flex gap-2 overflow-x-auto"><Link to="/shop" className={'whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-semibold ' + (!cat ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>All</Link>
+      {cats.map((c) => <Link key={c._id} to={`/shop/${c.slug}`} className={'whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-semibold ' + (cat === c.slug ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{c.name}</Link>)}</div>
     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
       <select aria-label="Sort" value={sort} onChange={(e) => set('sort', e.target.value)} className="rounded-lg border bg-white px-2 py-1.5"><option value="popular">Popular</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option><option value="new">Newest</option><option value="rating">Rating</option></select>
       <select aria-label="Max price" value={sp.get('maxPrice') || ''} onChange={(e) => set('maxPrice', e.target.value)} className="rounded-lg border bg-white px-2 py-1.5"><option value="">Any price</option><option value="100">Under ₹100</option><option value="500">Under ₹500</option><option value="1000">Under ₹1000</option></select>

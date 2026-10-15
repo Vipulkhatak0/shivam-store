@@ -38,7 +38,7 @@ export function Logo({ size = 'h-14 w-14', text = 'text-2xl', tagline = true, da
 export function Thumb({ p, cls = '' }) {
   return p.image
     ? <img src={img(p.image)} alt={p.name} loading="lazy" className={'bg-white object-contain ' + cls} />
-    : <div role="img" aria-label={p.name} className={'flex items-center justify-center bg-brand-soft ' + cls}><span className="text-5xl">{p.emoji || '🍰'}</span></div>;
+    : <div role="img" aria-label={p.name} className={'flex items-center justify-center bg-neutral-100 ' + cls}><span className="text-sm font-semibold text-neutral-500">Image unavailable</span></div>;
 }
 export function Qty({ v, set, max = 20 }) {
   return <div className="inline-flex items-center rounded-lg border border-neutral-300 bg-white"><button type="button" aria-label="Decrease quantity" className="px-2.5 py-1.5 text-neutral-600" onClick={() => set(Math.max(1, v - 1))}><Icon n="minus" className="h-3.5 w-3.5" /></button><span className="w-7 text-center text-sm font-semibold" aria-live="polite">{v}</span><button type="button" aria-label="Increase quantity" className="px-2.5 py-1.5 text-neutral-600" onClick={() => set(Math.min(max, v + 1))}><Icon n="plus" className="h-3.5 w-3.5" /></button></div>;
@@ -48,7 +48,7 @@ export const Badge = ({ s }) => <span className={'whitespace-nowrap rounded-md p
 export function Timeline({ status }) {
   if (['CANCELLED', 'REJECTED'].includes(status)) return <div className="mt-2"><Badge s={status} /></div>;
   const at = STAGES.indexOf(status);
-  return <ol className="mt-3 flex flex-wrap gap-1.5 text-xs">{STAGES.map((s, i) => <li key={s} className={'rounded-full px-2.5 py-1 font-semibold ' + (i <= at ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-500')}>{label(s)}</li>)}</ol>;
+  return <ol className="mt-3 flex flex-wrap gap-1.5 text-xs">{STAGES.map((s, i) => <li key={s} className={'rounded-md px-2.5 py-1 font-semibold ' + (i <= at ? 'bg-green-600 text-white' : 'bg-neutral-100 text-neutral-500')}>{label(s)}</li>)}</ol>;
 }
 export function useSync(fn, deps = []) {
   useEffect(() => { fn(); const h = () => fn(); window.addEventListener('sync', h); return () => window.removeEventListener('sync', h); }, deps); // eslint-disable-line

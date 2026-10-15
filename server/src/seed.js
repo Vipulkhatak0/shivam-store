@@ -1,7 +1,6 @@
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import { User, Category, Product, Coupon, Banner, DeliverySlot } from './models.js';
+import { Category, Product, Coupon, Banner, DeliverySlot } from './models.js';
 await mongoose.connect(process.env.MONGODB_URI);
 
 // Images live in client/public/img (cropped from the Shivam Store reference art). Items without an image show an emoji tile.
@@ -35,7 +34,6 @@ for (const [name, cat, price, cmp, stock, unit, emoji, image, flags, description
 for (const [i, label] of ['ASAP', '10-12', '12-2', '2-4', '4-6', '6-8', '8-10'].entries()) await DeliverySlot.findOneAndUpdate({ label }, { label, order: i }, { upsert: true });
 await Banner.findOneAndUpdate({ key: 'special' }, { key: 'special', title: 'Delicious Cakes', subtitle: 'For Every Occasion', cta: 'Order Now', link: '/shop/cakes', active: true }, { upsert: true });
 await Coupon.findOneAndUpdate({ code: 'SHIVAM10' }, { code: 'SHIVAM10', type: 'PERCENT', amount: 10, minOrder: 200, maxDiscount: 100, active: true }, { upsert: true });
-if (!(await User.findOne({ email: 'admin@shivamstore.com' })))
-  await User.create({ name: 'Shivam Admin', email: 'admin@shivamstore.com', phone: '9999999999', password: await bcrypt.hash('ChangeMe123!', 10), role: 'ADMIN', verified: true, mustChangePassword: true });
-console.log('Seeded. Admin: admin@shivamstore.com / ChangeMe123!  (you must change it on first login)');
+
+console.log('Seeded categories, products, delivery slots, banner and coupon. No users were created.');
 await mongoose.disconnect();

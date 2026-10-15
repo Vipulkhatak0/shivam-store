@@ -8,4 +8,4 @@ class Boundary extends React.Component {
   static getDerivedStateFromError() { return { e: true }; }
   render() { return this.state.e ? <div className="p-10 text-center"><h1 className="text-2xl font-bold">Something went wrong</h1><p className="mt-2">Please refresh the page.</p></div> : this.props.children; }
 }
-createRoot(document.getElementById('root')).render(<Boundary><BrowserRouter><App /></BrowserRouter></Boundary>);
+createRoot(document.getElementById('root')).render(<Boundary><BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}><App /></BrowserRouter></Boundary>);

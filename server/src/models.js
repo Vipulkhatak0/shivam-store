@@ -29,7 +29,7 @@ export const Product = model('Product', new Schema({
   stock: { type: Number, min: 0, default: 0 }, unit: { type: String, default: 'pc' },
   active: { type: Boolean, default: true }, featured: Boolean, popular: Boolean,
   customizable: Boolean, eggless: Boolean, tags: [String],
-  rating: { type: Number, default: 4.5 }, reviewCount: { type: Number, default: 0 },
+  rating: { type: Number, default: 0 }, reviewCount: { type: Number, default: 0 },
 }, T));
 
 const addr = { name: String, phone: String, line1: String, area: String, city: String, pincode: String, landmark: String };

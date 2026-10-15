@@ -52,7 +52,7 @@ r.post('/custom-orders/:id/accept', validate(z.object({ finalPrice: z.number().m
   const cr = await CustomRequest.findById(req.params.id);
   if (!cr || cr.status !== 'PENDING') throw new AppError('This request is no longer pending.', 'BAD_STATE');
   cr.status = 'ACCEPTED'; cr.finalPrice = Math.round(req.body.finalPrice); await cr.save(); await audit(req, `Accepted custom ${cr.code} at ₹${cr.finalPrice}`, cr._id);
-  await notify(cr.user, 'CUSTOM_ACCEPTED', '🎂 Your custom cake request has been accepted!', `Final price: ₹${cr.finalPrice}. Delivery: ${cr.deliveryTime}. Open My Orders to Confirm & Pay.`, { requestId: cr._id });
+  await notify(cr.user, 'CUSTOM_ACCEPTED', 'Your custom cake request has been accepted.', `Final price: ₹${cr.finalPrice}. Delivery: ${cr.deliveryTime}. Open My Orders to confirm and pay.`, { requestId: cr._id });
   emitUser(cr.user, 'custom-order:updated', cr); emitAdmin('custom-order:updated', cr); ok(res, cr);
 }));
 r.post('/custom-orders/:id/reject', validate(z.object({ reason: z.string().min(3).max(300) })), wrap(async (req, res) => {
@@ -77,7 +77,7 @@ r.post('/products', upload.single('image'), validate(prodSchema), wrap(async (re
   await audit(req, `Added product ${p.name}`, p._id);
   // Notify every active customer in real time (and keep it in their notification history).
   const customers = await User.find({ role: 'CUSTOMER', active: true, verified: true }).select('_id');
-  const docs = await Notification.insertMany(customers.map((c) => ({ user: c._id, type: 'PROMOTION', title: '🆕 New at Shivam Store', message: `${p.emoji || ''} ${p.name} is now available for ₹${p.price}.`, data: { slug: p.slug } })));
+  const docs = await Notification.insertMany(customers.map((c) => ({ user: c._id, type: 'PROMOTION', title: 'New at Shivam Store', message: `${p.name} is now available for ₹${p.price}.`, data: { slug: p.slug } })));
   docs.forEach((n) => emitUser(n.user, 'notification:new', n));
   emitAdmin('inventory:updated', { id: p._id, stock: p.stock });
   ok(res, p, 'Product added.', 201);
@@ -128,7 +128,7 @@ r.post('/chat/:uid', upload.single('file'), validate(z.object({ text: z.string()
   if (!text && !att.length) throw new AppError('Write a message or attach a photo.', 'VALIDATION_ERROR', 422);
   const m = await Message.create({ customer: req.params.uid, sender: req.user._id, senderRole: 'ADMIN', text, attachments: att });
   emitUser(req.params.uid, 'chat:message', m);
-  await notify(req.params.uid, 'NEW_MESSAGE', 'New message from Shivam Store', (text || '📷 Photo').slice(0, 100), {});
+  await notify(req.params.uid, 'NEW_MESSAGE', 'New message from Shivam Store', (text || 'Photo attachment').slice(0, 100), {});
   ok(res, m, 'Message sent.', 201);
 }));
 export default r;

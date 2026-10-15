@@ -7,7 +7,7 @@ import { Thumb, money, btn, btn2, inp, Field, useSync, useSeo, NotFound, Icon, Q
 const SIZES = [0.5, 1, 1.5, 2, 3], FLAVORS = ['Chocolate', 'Vanilla', 'Butterscotch', 'Red Velvet', 'Black Forest', 'Pineapple', 'Strawberry'];
 const TOPS = ['Strawberry', 'Chocolate', 'Oreo', 'KitKat', 'Ferrero', 'Nuts'], TIMES = ['10:00 AM', '12:00 PM', '2:00 PM', '4:00 PM', '6:00 PM', '8:00 PM'];
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-const Chip = ({ on, children, ...r }) => <button type="button" aria-pressed={on} {...r} className={'rounded-full border px-3 py-1 text-sm font-semibold ' + (on ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{children}</button>;
+const Chip = ({ on, children, ...r }) => <button type="button" aria-pressed={on} {...r} className={'rounded-md border px-3 py-1 text-sm font-semibold ' + (on ? 'border-brand bg-brand-soft text-brand' : 'bg-white')}>{children}</button>;
 
 function Customize({ p }) {
   const { user, toast } = useStore(); const nav = useNavigate();
@@ -55,7 +55,7 @@ export default function Product() {
   const { add, toggleWish, wish } = useStore(); const nav = useNavigate();
   useSeo(p?.name || 'Product', p?.description, p && { '@context': 'https://schema.org', '@type': 'Product', name: p.name, description: p.description, image: p.image ? [new URL(img(p.image), location.origin).href] : undefined, offers: { '@type': 'Offer', priceCurrency: 'INR', price: p.price, availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' }, ...(p.reviewCount > 0 && { aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviewCount } }) });
   useSync(() => { api('/products/' + slug).then((x) => { setP(x); api(`/products/${x._id}/reviews`).then(setRevs).catch(() => {}); }).catch(() => setP(null)); }, [slug]);
-  useEffect(() => { if (p && location.hash === '#customize') setTimeout(() => document.getElementById('customize')?.scrollIntoView({ behavior: 'smooth' }), 100); }, [p]);
+  useEffect(() => { if (p && location.hash === '#customize') setTimeout(() => document.getElementById('customize')?.scrollIntoView(), 100); }, [p]);
   if (p === undefined) return <div className="skeleton h-80" />;
   if (!p) return <NotFound />;
   const liked = wish.includes(p._id);
@@ -64,17 +64,17 @@ export default function Product() {
       <div className="relative rounded-2xl border bg-white p-4"><Thumb p={p} cls="mx-auto aspect-square w-full max-w-sm rounded-xl" />
         <button aria-label={liked ? 'Remove from wishlist' : 'Add to wishlist'} aria-pressed={liked} onClick={() => toggleWish(p._id)} className={'absolute right-4 top-4 ' + (liked ? 'text-brand' : 'text-neutral-400')}><Icon n="heart" className="h-6 w-6" fill={liked} /></button></div>
       <div><span className="text-sm text-neutral-500">{p.category?.name}</span><h1 className="text-3xl font-extrabold">{p.name}</h1>
-        <p className="text-sm">⭐ {p.rating?.toFixed(1)} · {p.reviewCount} review{p.reviewCount === 1 ? '' : 's'}</p>
+        {p.reviewCount > 0 && <p className="text-sm">{p.rating?.toFixed(1)} from {p.reviewCount} verified purchase review{p.reviewCount === 1 ? '' : 's'}</p>}
         <p className="mt-2 text-3xl font-extrabold">{money(p.price)} <span className="text-base font-normal text-neutral-500">/ {p.unit}</span></p>
         <p className="mt-3 text-neutral-700">{p.description}</p>
         <p className={'mt-3 text-sm font-bold ' + (p.stock > 0 ? 'text-green-700' : 'text-red-600')}>{p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}</p>
-        {p.eggless && <p className="mt-1 text-sm text-green-700">🟢 Eggless available</p>}
+        {p.eggless && <p className="mt-1 text-sm text-green-700">Eggless available</p>}
         <div className="mt-5 flex flex-wrap items-center gap-3"><Qty v={q} set={setQ} max={Math.max(1, p.stock)} />
           <button className={btn} disabled={p.stock < 1} onClick={() => add(p, q)}><Icon n="cart" className="h-4 w-4" />Add to Cart</button>
           <button className={btn2} disabled={p.stock < 1} onClick={() => { add(p, q); nav('/cart'); }}>Buy Now</button>
           {p.customizable && <a href="#customize" className={btn2}>Customize</a>}</div></div></div>
     {p.customizable && <Customize p={p} />}
     <h2 className="mb-2 mt-8 text-xl font-extrabold">Reviews</h2>
-    {revs.length === 0 ? <p className="text-sm text-neutral-500">No reviews yet. Customers can review a product after it is delivered.</p> : revs.map((r) => <div key={r._id} className="mb-2 rounded-xl border bg-white p-3 text-sm"><b>{r.name}</b> <span className="text-amber-500">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span><p className="text-neutral-700">{r.comment}</p></div>)}
+    {revs.length === 0 ? <p className="text-sm text-neutral-500">No reviews yet. Customers can review a product after it is delivered.</p> : revs.map((r) => <div key={r._id} className="mb-2 rounded-xl border bg-white p-3 text-sm"><b>{r.name}</b> <span className="text-neutral-600">Rating: {r.rating} out of 5</span><p className="text-neutral-700">{r.comment}</p></div>)}
   </>);
 }

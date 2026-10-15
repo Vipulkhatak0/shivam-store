@@ -1,54 +1,108 @@
 # Shivam Store
-Fresh Cakes • Snacks • Everyday Essentials. Bakery + grocery ordering with real-time admin notifications, custom cake requests, chat and Razorpay payments.
 
-**Stack:** React + Vite + Tailwind + Zustand (client) · Node + Express + Socket.IO + Mongoose (server) · MongoDB · JWT · Nodemailer · Razorpay.
+I’m building **Shivam Store** as a full-stack online storefront inspired by the experience of a neighborhood bakery and grocery shop. My goal is to make it easy for customers to discover everyday products, order cakes for special occasions, and manage their purchases, while giving the store team tools to run the business.
 
-## Quick start
-1. Install Node 18+ and MongoDB (local, or a free MongoDB Atlas URI).
-2. `cp server/.env.example server/.env` and set `MONGODB_URI` and `JWT_SECRET`.
-3. `cp client/.env.example client/.env` (default API is http://localhost:5000).
-4. From this folder:
+This project is built with the **MERN stack**: MongoDB, Express, React, and Node.js. I’m also exploring how AI can make shopping and store operations more helpful. The current codebase includes the store, checkout, custom cake requests, administration, and live customer support features; an AI assistant or other AI-powered features are future development ideas and are not implemented yet.
+
+## What I’m building
+
+- A responsive storefront with product search, categories, product details, a cart, and wishlist.
+- Customer accounts, Google sign-in support, saved addresses, order history, and notifications.
+- Checkout with delivery scheduling, coupons, cash on delivery, and optional Razorpay online payments.
+- Custom cake requests with size, flavor, shape, toppings, message, delivery details, and an optional reference photo.
+- An admin area for managing products, inventory, orders, custom cake requests, and customer conversations.
+- Live customer and admin chat using Socket.IO.
+- An AI-ready direction for future features such as product discovery, shopping assistance, and operational insights.
+
+## Tech stack
+
+| Area | Technologies |
+| --- | --- |
+| Frontend | React 18, Vite, React Router, Zustand, Tailwind CSS |
+| Backend | Node.js, Express, Socket.IO |
+| Database | MongoDB with Mongoose |
+| Authentication | JWT, bcrypt, Google sign-in support |
+| Payments and media | Razorpay integration, optional Cloudinary storage |
+| Validation and security | Zod, Helmet, rate limiting, MongoDB input sanitization |
+
+## Project structure
+
+```text
+client/                 React storefront and admin interface
+  src/pages/            Shop, product, cart, checkout, account, chat, admin
+  public/img/            Store and product images
+server/                 Express API and Socket.IO server
+  src/models.js          MongoDB models
+  src/*Routes.js         API routes for shop, authentication, and admin
+  src/seed.js            Sample catalog and store data
 ```
+
+## Getting started
+
+### Requirements
+
+- Node.js 18 or later and npm
+- A MongoDB database, local or hosted
+
+### Install dependencies
+
+From the project root:
+
+```bash
 npm install
-npm run seed      # categories, products, SHIVAM10 coupon, admin account
-npm run dev       # API :5000, site :5173
-npm run build     # production client build -> client/dist
-npm run start     # production API
 ```
-**Admin:** open `/admin/login` — `admin@shivamstore.com` / `ChangeMe123!` (you are forced to change it on first login).
 
-## Design
-The UI follows your `shivamm.png` reference. The chubby baker mascot, hero art and product/category images were cropped straight from it into `client/public/img` (the logo, hero, login card and the Chocolate Cake, Black Forest, Oreo, Lays, Milk Bread and Namkeen photos). Products without art in the reference (e.g. Butterscotch Cake, Croissant) show an emoji tile until you upload a photo in Admin → Products. Re-crop or swap any file in that folder to change the art.
+### Configure the server
 
-## Services (all optional locally, all fail loudly if missing)
-- **Google login:** create an OAuth *Web* client at console.cloud.google.com, add your site URL under "Authorized JavaScript origins", then set `GOOGLE_CLIENT_ID` (server/.env) and `VITE_GOOGLE_CLIENT_ID` (client/.env) to the same ID. Without them the Google button explains that it is not configured.
-- **Cloudinary (optional):** set `CLOUDINARY_*` in server/.env and uploads go to Cloudinary; otherwise they are saved in `server/uploads`.
-- **Email/OTP:** set `SMTP_*`. With no SMTP in development the OTP is printed in the server terminal. In production a missing SMTP returns a configuration error.
-- **Razorpay:** set `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`. Payments are verified server-side with an HMAC signature. Without keys, "Pay online" returns "Online payments are not configured". For local demos only, `TEST_PAYMENT=true` enables a clearly labelled test mode (disabled when `NODE_ENV=production`).
-- **Images:** product and reference photos are stored in `server/uploads` (served at `/uploads`). On Render/Railway use a persistent disk, or swap multer's storage for Cloudinary.
+Copy `server/.env.example` to `server/.env` and set at least:
 
-## The custom cake flow
-Customer: Chocolate Cake → Customize (size, flavor, shape, eggless, message, photo, toppings, date/time) → **Request Custom Cake** → admin gets a real-time "🔔 New Custom Cake Request" (Accept ₹ / Reject / Chat) → on accept the customer gets "🎂 Your custom cake request has been accepted!" with **Confirm & Pay** → payment → order is created → admin moves it Preparing → Ready → Out for Delivery → Delivered, customer notified at each step.
-Prices are always calculated on the server (cakes are priced per KG + toppings + shape).
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/shivam-store
+JWT_SECRET=replace-this-with-a-long-random-secret
+CLIENT_URL=http://localhost:5173
+PORT=5000
+```
 
-## Real-time
-Socket.IO is authenticated with the JWT. Rooms: `user:<id>` and `admin`. Events: `notification:new`, `order:created`, `order:updated`, `custom-order:new`, `custom-order:updated`, `chat:message`, `inventory:updated`. The server decides the room from the token; clients cannot choose a user id.
+The server can also use optional settings for Google sign-in, Razorpay, Cloudinary, SMTP email, delivery fees, and store time zone. Those integrations need their corresponding credentials to work. Keep real secrets in your local environment; do not commit them.
 
-## API (JSON: `{success, message, data}` / `{success:false, message, errorCode}`)
-Auth: `POST /api/auth/{register,verify-otp,resend-otp,login,google,forgot-password,reset-password,logout,change-password}`, `GET|PATCH /api/auth/me`
-Shop: `GET /api/categories`, `GET /api/products?q&category&sort&page&eggless&customizable&maxPrice`, `GET /api/products/:slug`, `POST /api/coupons/validate`
-Orders: `POST /api/orders`, `GET /api/orders`, `GET /api/orders/:id`, `POST /api/orders/:id/{verify,cancel}`
-Custom: `POST /api/custom-orders/estimate`, `POST|GET /api/custom-orders`, `POST /api/custom-orders/:id/pay`
-Other: `GET /api/notifications`, `POST /api/notifications/read`, `GET|POST /api/chat`, `GET|POST /api/wishlist[/:id]`, `GET|POST|DELETE /api/addresses`, `GET|POST /api/products/:id/reviews`, `GET /api/orders/:id/reorder`, `GET /api/banner`, `GET /api/delivery-slots`, `GET /sitemap.xml`
-Admin (role ADMIN): `/api/admin/{dashboard,orders,custom-orders,products,categories,customers,coupons,audit,chat}`
+### Start the app
 
-## Deployment
-- **Database:** MongoDB Atlas → copy the URI into `MONGODB_URI`.
-- **API (Render/Railway):** root `server`, build `npm install`, start `npm run start`. Set all env vars, `NODE_ENV=production`, `CLIENT_URL=<your Vercel URL>`. Run `npm run seed` once.
-- **Site (Vercel):** root `client`, build `npm run build`, output `dist`, env `VITE_API_URL=<API URL>`. Add a rewrite of all paths to `/index.html` for React Router.
+Run both the API and the Vite development server from the root:
 
-## Not built yet
-TypeScript (the code is JavaScript/ESM), refresh tokens (one 7-day login token is used), Framer Motion / TanStack Query / React Hook Form, review photos, a manual "create order" button in admin, category image upload in admin, SMS/WhatsApp, and saved-payment methods. Nothing here has been run end to end yet: expect to fix a few errors on first `npm run dev`.
+```bash
+npm run dev
+```
 
-## Test checklist
-Register → OTP → login · search/filter/sort · add to cart · coupon `SHIVAM10` · COD checkout · forgot password · wishlist heart · saved address at checkout · reorder · leave a review after delivery · chat with a photo and typing indicator · edit the Today's Special banner and delivery slots in Admin → Settings · admin receives order live · accept/prepare/deliver and watch the customer's tracker · custom cake request → accept/reject → pay → order · chat both ways · add product (customers get a notification) · stock drops on order and restores on cancel · low-stock alert · mobile layout at 320–414px · admin panel on mobile.
+The client runs at `http://localhost:5173` and the API defaults to `http://localhost:5000`.
+
+To load the sample categories, products, delivery slots, banner, and coupon into MongoDB, run:
+
+```bash
+npm run seed
+```
+
+The seed script does not create user accounts. Create an account through the app, and configure an admin account/role in the database before using the admin area.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the client and API in development mode |
+| `npm run build` | Build the client for production |
+| `npm start` | Start the API server |
+| `npm run seed` | Add or update sample store data |
+
+## Configuration notes
+
+- Online payments require `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` on the server. `TEST_PAYMENT=true` enables the local test-payment flow only outside production.
+- Google sign-in requires the client ID on both sides: `VITE_GOOGLE_CLIENT_ID` for the client and `GOOGLE_CLIENT_ID` for the server.
+- Cloudinary and SMTP are optional. The app can run without them, but their related hosted image and email functions need configuration.
+- The server creates an `uploads/` directory for uploaded files when it starts.
+
+## AI roadmap
+
+I want to extend the shopping experience with AI in a practical way—for example, helping customers find products using natural-language requests or suggesting items based on their needs. I’ll add an AI provider and features when I choose the integration and define how customer and store data should be handled. **There is no AI model/API integration in the current codebase.**
+
+## Current status
+
+This is an actively developed project. Payment, Google sign-in, email, and cloud media depend on external credentials and configuration. Review the available settings in `server/.env.example` before deploying, and use a production-ready MongoDB URI and strong secrets for a live environment.

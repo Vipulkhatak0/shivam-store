@@ -28,13 +28,13 @@ export default function Orders() {
   async function retryPay(o) { try { await api(`/orders/${o._id}/verify`, { method: 'POST', body: {} }); toast('Paid'); } catch (e) { toast(e.message); } window.dispatchEvent(new Event('sync')); }
   const ChatBox = <div className="mt-3"><button className={btn2} onClick={() => setChat(!chat)}><Icon n="chat" className="h-4 w-4" />{chat ? 'Hide chat' : 'Chat with the bakery'}</button>{chat && <div className="mt-2"><Chat base="/chat" me="CUSTOMER" /></div>}</div>;
   return (<div className="mx-auto max-w-3xl space-y-8">
-    {loc.state?.placed && <div className="rounded-2xl bg-green-50 p-5 text-center"><div className="text-4xl">🎉</div><h1 className="text-xl font-extrabold">Order Confirmed!</h1><p>Order #{loc.state.placed} has been placed. Track it below.</p></div>}
+    {loc.state?.placed && <div className="rounded-lg bg-green-50 p-5 text-center"><h1 className="text-xl font-extrabold">Order confirmed</h1><p>Order #{loc.state.placed} has been placed. Track it below.</p></div>}
     {reqs.length > 0 && <section><h1 className="mb-3 text-2xl font-extrabold">Custom cake requests</h1>
       {reqs.map((r) => <div key={r._id} className="mb-3 rounded-xl border bg-white p-4"><div className="flex items-center justify-between"><b>#{r.code} · {r.productName}</b><Badge s={r.status} /></div>
         <p className="mt-1 text-sm text-neutral-600">{r.customization.kg} KG · {r.customization.flavor} · {r.customization.eggless ? 'Eggless' : 'Egg'} · “{r.customization.message}” · {r.deliveryTime}, {r.deliveryDate}</p>
         {r.customization.photo && <img src={img(r.customization.photo)} alt="Your reference" className="mt-2 h-20 rounded-lg" />}
         {r.status === 'PENDING' && <p className="mt-2 text-sm">Estimated {money(r.estimatedPrice)}. Waiting for the bakery to respond…</p>}
-        {r.status === 'ACCEPTED' && !r.order && <div className="mt-3 rounded-xl bg-green-50 p-3"><b>🎂 Your custom cake request has been accepted!</b><p className="text-sm">Final price: <b>{money(r.finalPrice)}</b> · Delivery: {r.deliveryTime}</p>
+        {r.status === 'ACCEPTED' && !r.order && <div className="mt-3 rounded-xl bg-green-50 p-3"><b>Your custom cake request has been accepted.</b><p className="text-sm">Final price: <b>{money(r.finalPrice)}</b> · Delivery: {r.deliveryTime}</p>
           <div className="mt-2 flex flex-wrap gap-2"><button className={btn} disabled={busy === r._id} onClick={() => payReq(r, 'ONLINE')}>Confirm &amp; Pay {money(r.finalPrice)}</button><button className={btn2} disabled={busy === r._id} onClick={() => payReq(r, 'COD')}>Pay on delivery</button></div></div>}
         {r.status === 'REJECTED' && <p className="mt-2 text-sm text-red-700">Declined: {r.rejectReason}</p>}</div>)}{ChatBox}</section>}
     <section><h1 className="mb-3 text-2xl font-extrabold">My orders</h1>
