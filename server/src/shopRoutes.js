@@ -8,23 +8,32 @@ import Razorpay from 'razorpay';
 import { v2 as cloudinary } from 'cloudinary';
 import { Category, Product, Order, CustomRequest, Notification, Message, Coupon, DeliverySlot, User } from './models.js';
 import { ok, AppError, wrap, auth, validate, notify, notifyAdmins, emitUser, emitAdmin } from './util.js';
+import { sendSmsEvent, sendAdminSmsEvent } from './services/smsService.js';
 
 export const upload = multer({
   storage: multer.diskStorage({ destination: 'uploads', filename: (q, f, cb) => cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + path.extname(f.originalname).toLowerCase()) }),
   limits: { fileSize: 5e6 },
   fileFilter: (q, f, cb) => (/^image\/(png|jpe?g|webp)$/.test(f.mimetype) ? cb(null, true) : cb(new AppError('Only PNG, JPG or WebP images are allowed.', 'INVALID_FILE', 422))),
 });
-export async function storeFile(f) {
+export async function storeFile(f, { requireCloudinary = false } = {}) {
   if (!f) return undefined;
   const bytes=fs.readFileSync(f.path), ext=path.extname(f.originalname).toLowerCase();
   const valid=(ext==='.png'&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))||(['.jpg','.jpeg'].includes(ext)&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255)||(ext==='.webp'&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
   if(!valid){fs.unlink(f.path,()=>{});throw new AppError('Unsupported image format.','INVALID_FILE',422);}
   const { CLOUDINARY_CLOUD_NAME: c, CLOUDINARY_API_KEY: k, CLOUDINARY_API_SECRET: s } = process.env;
-  if (c && k && s) {
-    cloudinary.config({ cloud_name: c, api_key: k, api_secret: s });
-    const up = await cloudinary.uploader.upload(f.path, { folder: 'shivam-store' }); fs.unlink(f.path, () => {}); return up.secure_url;
+  if (!(c && k && s)) {
+    if (requireCloudinary) {
+      fs.unlink(f.path, () => {});
+      throw new AppError('Banner image hosting is not configured. Set the Cloudinary credentials on the server.', 'CLOUDINARY_NOT_CONFIGURED', 503);
+    }
+    return '/uploads/' + f.filename;
   }
-  return '/uploads/' + f.filename;
+  try {
+    cloudinary.config({ cloud_name: c, api_key: k, api_secret: s });
+    const up = await cloudinary.uploader.upload(f.path, { folder: 'shivam-store' });
+    if (!up.secure_url) throw new AppError('Cloudinary did not return a secure image URL.', 'IMAGE_UPLOAD_FAILED', 502);
+    return up.secure_url;
+  } finally { fs.unlink(f.path, () => {}); }
 }
 const r = Router();
 const num = (k, d) => Number(process.env[k] ?? d);
@@ -141,6 +150,9 @@ async function announce(order, paid) {
     catch (e) { console.error('Custom order notification update failed:', e.message); }
   }
   const customerName=order.address?.name||'A customer';
+  let customer = null;
+  try { customer = await User.findById(order.user).select('name phone').lean(); } catch (e) { console.error('[SMS] Could not load customer details for notification:', e.message); }
+  if (paid) sendSmsEvent('PAYMENT_SUCCESS', customer?.phone || order.address?.phone, { customer_name: customer?.name || customerName, order_id: order.code, amount: order.total }, `payment:${order._id}`).catch((e) => console.error('[SMS] PAYMENT_SUCCESS failed safely:', e.message));
   const tasks=[
     notifyAdmins('ORDER_PLACED', '', '', { template:true, orderNumber:order.code, customerName, total:order.total, orderId: order._id }, 'order:created', order),
     notify(order.user, paid ? 'PAYMENT_SUCCESS' : 'ORDER_PLACED', '', '', { template:true, orderNumber:order.code, total:order.total, orderId: order._id }),
@@ -188,9 +200,9 @@ r.post('/orders', auth, validate(z.object({
   const order = await createOrder({ user: req.user._id, lines, subtotal, ...t, address: b.address, deliveryDate: b.deliveryDate, deliverySlot: b.deliverySlot, note: b.note, method: b.method, idempotencyKey: b.idempotencyKey });
   let payment = null;
   try { payment = await startPayment(order); } catch (e) { await restoreStock(order); if (order.coupon) await Coupon.updateOne({ code: order.coupon, used: { $gt: 0 } }, { $inc: { used: -1 } }); await order.deleteOne(); throw e; }
-  if (b.method === 'COD') {
-    try { await announce(order, false); } catch (e) { console.error('Order notification delivery failed:', e); }
-  }
+  sendSmsEvent('ORDER_PLACED', req.user.phone || b.address.phone, { customer_name: b.address.name || req.user.name, order_id: order.code, amount: order.total }, `order-placed:${order._id}`).catch((e) => console.error('[SMS] ORDER_PLACED failed safely:', e.message));
+  sendAdminSmsEvent('ADMIN_NEW_ORDER', { customer_name: b.address.name || req.user.name, order_id: order.code, amount: order.total }, `admin-order:${order._id}`).catch((e) => console.error('[SMS] ADMIN_NEW_ORDER failed safely:', e.message));
+  try { await announce(order, false); } catch (e) { console.error('Order notification delivery failed:', e); }
   ok(res, { order, payment }, 'Order created.', 201);
 }));
 r.post('/orders/:id/verify', auth, wrap(async (req, res) => {
@@ -271,7 +283,9 @@ r.post('/custom-orders/:id/pay', auth, validate(z.object({ method: z.enum(['COD'
   cr.order = order._id; await cr.save();
   let payment = null;
   try { payment = await startPayment(order); } catch (e) { cr.order = undefined; await cr.save(); log(order, 'CANCELLED'); await order.save(); throw e; }
-  if (req.body.method === 'COD') await announce(order, false);
+  sendSmsEvent('ORDER_PLACED', req.user.phone || cr.address.phone, { customer_name: cr.address.name || req.user.name, order_id: order.code, amount: order.total }, `order-placed:${order._id}`).catch((e) => console.error('[SMS] ORDER_PLACED failed safely:', e.message));
+  sendAdminSmsEvent('ADMIN_NEW_ORDER', { customer_name: cr.address.name || req.user.name, order_id: order.code, amount: order.total }, `admin-order:${order._id}`).catch((e) => console.error('[SMS] ADMIN_NEW_ORDER failed safely:', e.message));
+  try { await announce(order, false); } catch (e) { console.error('Order notification delivery failed:', e.message); }
   ok(res, { order, payment }, 'Order created.', 201);
 }));
 

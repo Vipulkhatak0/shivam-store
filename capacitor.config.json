@@ -1,0 +1,14 @@
+{
+  "appId": "com.shivamstore.app",
+  "appName": "Shivam Store",
+  "webDir": "client/dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchFadeOutDuration": 200,
+      "backgroundColor": "#ffffffff",
+      "androidScaleType": "CENTER_INSIDE",
+      "showSpinner": false
+    }
+  }
+}

@@ -3,8 +3,19 @@ import { z } from 'zod';
 import { User, Notification, Category, Product, Order, CustomRequest, Message, Coupon, AuditLog } from './models.js';
 import { ok, AppError, wrap, auth, adminOnly, validate, notify, emitUser, emitAdmin, audit } from './util.js';
 import { upload, restoreStock, logStatus, storeFile } from './shopRoutes.js';
+import { sendSms, sendSmsEvent, sendAdminSmsEvent, smsStatus, getAdminSmsNumbers, normalizeIndianMobile } from './services/smsService.js';
 const r = Router();
 r.use(auth, adminOnly);
+const smsTestSchema = z.object({ mobile: z.string().min(10).max(16) });
+r.get('/notifications/sms-status', wrap(async (_req, res) => ok(res, smsStatus())));
+r.post('/notifications/test-sms', validate(smsTestSchema), wrap(async (req, res) => {
+  const mobile = normalizeIndianMobile(req.body.mobile);
+  if (!mobile || !getAdminSmsNumbers().includes(mobile)) throw new AppError('Choose a valid number configured in ADMIN_SMS_NUMBERS.', 'INVALID_MOBILE', 422);
+  if (!process.env.MSG91_TEMPLATE_TEST) throw new AppError('The MSG91 test SMS template is not configured.', 'SMS_TEST_TEMPLATE_MISSING', 503);
+  const result = await sendSms({ event: 'TEST', mobile, templateId: process.env.MSG91_TEMPLATE_TEST, variables: {}, eventKey: `sms-test:${req.user._id}:${Date.now()}` });
+  if (!result.success) throw new AppError(result.reason === 'not_configured' ? 'MSG91 is not configured.' : 'Test SMS could not be sent.', 'SMS_SEND_FAILED', 502);
+  ok(res, {}, 'Test SMS sent.');
+}));
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 5);
 const bool = z.preprocess((v) => v === true || v === 'true', z.boolean());
 
@@ -58,6 +69,8 @@ r.patch('/orders/:id/status', validate(z.object({ status: z.enum(Object.keys(TEX
   if (s === 'DELIVERED' && o.payment.method === 'COD') o.payment.status = 'PAID';
   logStatus(o, s); await o.save(); await audit(req, `Order ${o.code} → ${s}`, o._id);
   const type = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' ? 'ORDER_REJECTED' : s === 'CANCELLED' ? 'ORDER_CANCELLED' : 'ORDER_STATUS';
+  const smsEvent = s === 'CONFIRMED' ? 'ORDER_ACCEPTED' : s === 'REJECTED' || s === 'CANCELLED' ? 'ORDER_REJECTED' : s === 'OUT_FOR_DELIVERY' ? 'OUT_FOR_DELIVERY' : s === 'DELIVERED' ? 'ORDER_DELIVERED' : null;
+  if (smsEvent) User.findById(o.user).select('name phone').lean().then((customer) => sendSmsEvent(smsEvent, customer?.phone || o.address?.phone, { customer_name: customer?.name || o.address?.name || '', order_id: o.code, amount: o.total, reason: req.body.reason || '' }, `order-status:${o._id}:${s}`)).catch((e) => console.error(`[SMS] ${smsEvent} failed safely:`, e.message));
   try { await notify(o.user, type, '', '', { template:true, orderNumber:o.code, status:TEXT[s], orderId:o._id, ...(req.body.reason&&{reason:req.body.reason}) }); }
   catch (e) { console.error('Order notification persistence failed:', e.message); }
   emitUser(o.user, 'order:updated', o); emitAdmin('order:updated', o); ok(res, o);
@@ -126,6 +139,7 @@ r.post('/products', upload.fields([{name:'images',maxCount:8},{name:'image',maxC
   const images=(await Promise.all(files.map(storeFile))).filter(Boolean); const main=images[req.body.mainImageIndex||0]||images[0];
   const p = await Product.create({ ...req.body, slug: slug(req.body.name), image: main, images, ...(req.body.active && { notificationPublishedAt: new Date() }) });
   await audit(req, `Added product ${p.name}`, p._id);
+  if (p.active) sendAdminSmsEvent('ADMIN_NEW_PRODUCT', { product_name: p.name }, `admin-product:${p._id}`).catch((e) => console.error('[SMS] ADMIN_NEW_PRODUCT failed safely:', e.message));
   if (p.active) await announcePublishedProduct(p).catch((e) => console.error('New product notification batch failed:', e.message));
   emitAdmin('inventory:updated', { id: p._id, stock: p.stock });
   ok(res, p, 'Product added.', 201);
@@ -134,6 +148,7 @@ r.put('/products/:id', upload.fields([{name:'images',maxCount:8},{name:'image',m
   const p = await Product.findById(req.params.id); if (!p) throw new AppError('Product not found.', 'NOT_FOUND', 404);
   const wasActive=Boolean(p.active), files=[...(req.files?.images||[]),...(req.files?.image||[])]; Object.assign(p, req.body); if(files.length){p.images=await Promise.all(files.map(storeFile));p.image=p.images[req.body.mainImageIndex||0]||p.images[0];}
   const newlyPublished=Boolean(!wasActive&&p.active&&!p.notificationPublishedAt);if(newlyPublished)p.notificationPublishedAt=new Date();await p.save();
+  if(newlyPublished)sendAdminSmsEvent('ADMIN_NEW_PRODUCT',{product_name:p.name},`admin-product:${p._id}`).catch((e)=>console.error('[SMS] ADMIN_NEW_PRODUCT failed safely:',e.message));
   if(newlyPublished)await announcePublishedProduct(p).catch((e)=>console.error('New product notification batch failed:',e.message));
   await audit(req, `Edited product ${p.name} (₹${p.price}, stock ${p.stock})`, p._id); emitAdmin('inventory:updated', { id: p._id, stock: p.stock }); ok(res, p);
 }));

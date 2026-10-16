@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { User } from './models.js';
 import { OAuth2Client } from 'google-auth-library';
 import { ok, AppError, wrap, auth, validate, sign, sendMail, mailHtml, notifyAdmins } from './util.js';
+import { sendSmsEvent } from './services/smsService.js';
 const r = Router();
 
 async function issueOtp(u) {
@@ -41,6 +42,7 @@ r.post('/verify-otp', validate(z.object({ email, otp: z.string().length(6) })), 
   if (!(await bcrypt.compare(req.body.otp, u.otp))) { await u.save(); throw new AppError('Incorrect code.', 'OTP_INVALID'); }
   u.verified = true; u.otp = undefined; u.otpExpires = undefined; await u.save();
   try { await notifyAdmins('NEW_CUSTOMER','','',{template:true,customerName:u.name}); } catch (e) { console.error('New customer notification failed:', e.message); }
+  sendSmsEvent('CUSTOMER_REGISTERED', u.phone, { customer_name: u.name }, `customer-registered:${u._id}`).catch((e) => console.error('[SMS] CUSTOMER_REGISTERED failed safely:', e.message));
   ok(res, {}, 'Email verified. You can log in now.');
 }));
 

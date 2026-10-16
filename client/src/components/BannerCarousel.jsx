@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, img } from '../api.js';
 import { btn, Icon } from '../ui.jsx';
 
-const ROTATE_MS = 120000;
+const configuredInterval = Number(import.meta.env.VITE_BANNER_INTERVAL);
+const ROTATE_MS = Number.isFinite(configuredInterval) && configuredInterval > 0 ? configuredInterval : 120000;
 const external = (url) => /^https?:\/\//i.test(url || '');
 
 export default function BannerCarousel() {
@@ -32,7 +33,7 @@ export default function BannerCarousel() {
   return <section aria-label="Store promotions" aria-roledescription="carousel" className="mt-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
     <div className="relative isolate h-[220px] overflow-hidden rounded-2xl bg-peach shadow-sm sm:h-[280px] lg:h-[340px]" style={{ backgroundColor: current.backgroundColor || '#FCE8E6' }}>
       <div className={'flex h-full ' + (reducedMotion ? '' : 'transition-transform duration-700 ease-in-out')} style={{ transform: `translateX(-${index * 100}%)` }}>
-        {banners.map((b, i) => <article key={b._id} aria-hidden={i !== index} style={{ backgroundColor: b.backgroundColor || '#FCE8E6' }} className="relative h-full w-full shrink-0 overflow-hidden">
+        {banners.map((b, i) => <article key={b._id} aria-hidden={i !== index} style={{ flex: '0 0 100%', backgroundColor: b.backgroundColor || '#FCE8E6' }} className="relative h-full w-full shrink-0 overflow-hidden">
           {(b.desktopImage || b.mobileImage) && <picture className="absolute inset-0 z-0">
             {b.mobileImage && <source media="(max-width: 639px)" srcSet={img(b.mobileImage)} />}
             {b.desktopImage && <img src={img(b.desktopImage)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} loading={i === index ? 'eager' : 'lazy'} className="h-full w-full object-cover transition-transform duration-[8000ms] ease-out hover:scale-[1.025]" />}

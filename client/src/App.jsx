@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from './store.js';
 import { Home, Shop } from './pages/Shop.jsx';
@@ -84,6 +86,10 @@ export default function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (ready && Capacitor.isNativePlatform()) SplashScreen.hide().catch(() => {});
+  }, [ready]);
 
   useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
 

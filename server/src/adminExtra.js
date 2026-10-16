@@ -17,7 +17,7 @@ const bannerInput = z.object({
 const bannerFiles = upload.fields([{ name: 'desktopImage', maxCount: 1 }, { name: 'mobileImage', maxCount: 1 }]);
 async function persistBannerFiles(body, files) {
   const update = { ...body };
-  for (const field of ['desktopImage', 'mobileImage']) if (files?.[field]?.[0]) update[field] = await storeFile(files[field][0]);
+  for (const field of ['desktopImage', 'mobileImage']) if (files?.[field]?.[0]) update[field] = await storeFile(files[field][0], { requireCloudinary: true });
   if (update.startsAt === '') update.startsAt = null;
   else if (update.startsAt) update.startsAt = new Date(update.startsAt);
   if (update.endsAt === '') update.endsAt = null;

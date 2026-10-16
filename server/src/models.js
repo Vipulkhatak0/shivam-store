@@ -71,6 +71,8 @@ export const Coupon = model('Coupon', new Schema({
   usageLimit: Number, used: { type: Number, default: 0 }, active: { type: Boolean, default: true },
 }));
 export const AuditLog = model('AuditLog', new Schema({ admin: id('User'), action: String, target: String }, T));
+const smsEventS = new Schema({ key: { type: String, unique: true }, event: String, mobile: String, status: { type: String, enum: ['SENDING', 'SENT', 'FAILED'] } }, T);
+export const SmsEvent = model('SmsEvent', smsEventS);
 
 const rev = new Schema({ product: id('Product'), user: id('User'), name: String, rating: { type: Number, min: 1, max: 5 }, comment: String }, T);
 rev.index({ product: 1, user: 1 }, { unique: true });
